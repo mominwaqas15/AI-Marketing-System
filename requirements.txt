@@ -1,0 +1,9 @@
+fastapi==0.98.0
+uvicorn==0.22.0
+schedule==1.2.0
+qrcode==7.4.2
+torch==2.0.1
+opencv-python-headless==4.8.0.76
+python-dotenv==1.0.0
+openai==0.27.8
+twilio==9.3.8

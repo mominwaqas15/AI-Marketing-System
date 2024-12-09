@@ -1,0 +1,11 @@
+changes for testing on:
+
+1) init.py
+    lines 49-53
+
+2) DetectionModels.py
+    lines 61-62
+    
+
+Whatsapp Sandbox number "+18777804236"    
+        
