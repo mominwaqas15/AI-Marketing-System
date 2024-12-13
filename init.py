@@ -16,6 +16,8 @@ from WhatsappService import WhatsAppService
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, BackgroundTasks, Request
+from html_generator import generate_qr_code_page
+
 
 load_dotenv()
 
@@ -35,12 +37,15 @@ app.add_middleware(
 )
 
 PORT = int(os.getenv("PORT", 8000))
-# HOST = os.getenv("HOST", "0.0.0.0")     #what abdx wrote
-HOST = os.getenv("HOST", "127.0.0.1")     # what momin wrote
+HOST = os.getenv("HOST", "0.0.0.0")
 
 RTSP_URL = "rtsp://admin:Ashton2012@41.222.89.66:560"
-OUTPUT_DIR = "Human-Detection-Logs" 
+OUTPUT_DIR = "Human-Detection-Logs"
 ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates
+
+# Global variables
+sessiontoken = None
+bestframe = None
 
 app.mount("/static", StaticFiles(directory=OUTPUT_DIR), name="static")
 
@@ -51,87 +56,35 @@ chat_model = Model()
 # Global variable to track ongoing chat sessions
 active_chat_sessions = {}
 
-# def detect_human_and_gesture():                             # with QR code generation module
-#     print("Starting human detection...")
-
-#     # Step 1: Detect human presence
-#     detection_success, best_frame, frame_path = detector.detect_humans()
-
-#     detection_success = True            # for simulating True Detection
-
-#     if detection_success:
-#         print("Human detected! Generating a complement...")
-
-#         session_token = chat_model.generate_token()
-#         chat_model.initialize_chat_history(session_token)
-
-#         # # Step 2: Generate complement to grab attention
-#         # try:
-#         #     complement = chat_model.image_description(frame_path, session_token)
-#         #     print(f"\n\nComplement for the user: {complement}\n\n")
-#         #     # send_sms(os.getenv("TWILIO_PHONE_NUMBER"), complement)  # Optional: Send SMS to notify the admin
-#         # except Exception as e:
-#         #     print(f"Error generating complement: {str(e)}")
-#         #     complement = "You look amazing!"
-
-#         # Step 3: Check for gestures
-#         print("Checking for gestures...")
-#         # gesture_detected = detector.process_frame_for_gesture(best_frame)           # for simulating True Detection
-
-#         gesture_detected = True        # for simulating True Detection
-
-#         if gesture_detected:
-#             print("Hi gesture detected! Preparing QR code...")
-
-#             # Step 4: Generate QR code for WhatsApp chat
-#             session_token = chat_model.generate_token()
-#             chat_model.initialize_chat_history(session_token)
-#             active_chat_sessions[session_token] = {
-#                 "frame_path": frame_path,
-#                 "timestamp": time.time(),
-#             }
-
-#             # Create WhatsApp chat link
-#             twilio_phone_link = os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")
-#             whatsapp_link = f"https://wa.me/{twilio_phone_link}?text=Hi!%20I'm%20interested%20in%20chatting."
-#             qr_code_path = generate_qr_code(whatsapp_link, session_token)
-#             print(f"QR Code generated at: {qr_code_path}")
-
-#             # Log the URL for debugging
-#             print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
-#         else:
-#             print("No valid gesture detected.")
-#     else:
-#         print("No human detected.")
 
 def detect_human_and_gesture():
+    global sessiontoken, bestframe
     print("Starting human detection...")
 
     # Step 1: Detect human presence
     detection_success, best_frame, frame_path = detector.detect_humans()
 
-    detection_success = True  # Simulating True Detection
-
     if detection_success:
         print("Human detected! Generating a complement...")
 
         session_token = chat_model.generate_token()
+        print(f"Generated session token: {session_token}")
+
         chat_model.initialize_chat_history(session_token)
 
         active_chat_sessions[session_token] = {
-                "frame_path": frame_path,
-                "timestamp": time.time(),
-            }
+            "frame_path": frame_path,
+            "timestamp": time.time(),
+        }
 
         # Step 3: Check for gestures
         print("Checking for gestures...")
-
-        # gesture_detected = detector.process_frame_for_gesture(best_frame)           # for simulating True Detection
-        
-        gesture_detected = True  # Simulating True Detection
+        gesture_detected = detector.process_frame_for_gesture(best_frame)
 
         if gesture_detected:
             print("Hi gesture detected! Preparing QR code...")
+            sessiontoken = session_token  # Update global variable
+            bestframe = best_frame        # Update global variable
 
             # Generate WhatsApp chat link
             whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
@@ -148,27 +101,31 @@ def detect_human_and_gesture():
     else:
         print("No human detected.")
 
+
 def schedule_task():
     """
-    Schedule the human detection task every 3 minutes.
+    Schedule the human detection task every 20 seconds.
     """
     schedule.every(20).seconds.do(detect_human_and_gesture)
     while True:
         schedule.run_pending()
-        time.sleep(1)  
+        time.sleep(1)
+
 
 @app.on_event("startup")
 def start_scheduler():
     """
-    Start the scheduler thread when the FastAPI server starts. 
+    Start the scheduler thread when the FastAPI server starts.
     """
     scheduler_thread = Thread(target=schedule_task, daemon=True)
     scheduler_thread.start()
     print("Scheduler started.")
 
+
 @app.get("/")
 async def root():
     return {"message": "Human and Gesture Detection API is running!"}
+
 
 @app.get("/chat/{session_token}")
 async def chat(session_token: str, user_input: str):
@@ -182,11 +139,12 @@ async def chat(session_token: str, user_input: str):
         return {"message": response}
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Error during chat: {str(e)}"})
-    
+
+
 @app.get("/get-complement/{session_token}")
-async def chat(session_token: str, image_path: str):
+async def get_complement(session_token: str, image_path: str):
     """
-    Endpoint for user chat interaction after a gesture is detected.
+    Endpoint for generating a complement for an image.
     """
     if session_token not in active_chat_sessions:
         return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
@@ -194,56 +152,40 @@ async def chat(session_token: str, image_path: str):
         response = chat_model.image_description(image_path, session_token)
         return {"message": response}
     except Exception as e:
-        return JSONResponse(status_code=500, content={"message": f"Error during chat: {str(e)}"})
-    
-# @app.get("/show-qr/{session_token}")              # Twilio Integration
-# async def show_qr_page(session_token: str):
-#     """
-#     Serve an HTML page with the QR code.
-#     """
-#     if session_token not in active_chat_sessions:
-#         return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
-    
-#     # Generate the QR code
-#     chat_url = f"http://{HOST}:{PORT}/chat/{session_token}"
-#     qr_code_path = generate_qr_code(chat_url, session_token)
-    
-#     # Serve HTML
-#     html_content = f"""
-#     <html>
-#         <head><title>QR Code for Chat</title></head>
-#         <body>
-#             <h1>Scan the QR Code to start chatting!</h1>
-#             <h2>The Session token is [{session_token}]</h2>
-#             <img src="/static/{os.path.basename(qr_code_path)}" alt="QR Code">
-#         </body>
-#     </html>
-#     """
-#     return HTMLResponse(content=html_content)
+        return JSONResponse(status_code=500, content={"message": f"Error during complement generation: {str(e)}"})
+
 
 @app.get("/show-qr/{session_token}")
-async def show_qr_page(session_token: str):
-    """
-    Serve an HTML page with the QR code.
-    """
-    if session_token not in active_chat_sessions:
+async def show_qr_page():
+    global sessiontoken, bestframe
+
+    if sessiontoken not in active_chat_sessions:
         return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
-    
+
+    # Save the best frame as an image file
+    frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
+    if bestframe is not None:
+        cv2.imwrite(frame_save_path, bestframe)
+    else:
+        return JSONResponse(status_code=500, content={"message": "No frame available to process."})
+
     # Generate the QR code
-    whatsapp_link = f"https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I'm%20interested%20in%20chatting."
-    qr_code_path = generate_qr_code(whatsapp_link, session_token)
-    
-    # Serve HTML4
-    html_content = f"""
-    <html>
-        <head><title>QR Code for Chat</title></head>
-        <body>
-            <h1>Scan the QR Code to start chatting on WhatsApp!</h1>
-            <img src="/static/{os.path.basename(qr_code_path)}" alt="QR Code">
-        </body>
-    </html>
-    """
+    whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
+    qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
+
+    # Generate complement using the chat model
+    complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
+
+    # Use the HTML generation function
+    html_content = html_content = generate_qr_code_page(
+    complement=complement,
+    qr_code_path=os.path.basename(qr_code_path)
+    )
+
+
     return HTMLResponse(content=html_content)
+
+
 
 @app.post("/start-detection")
 async def start_detection(background_tasks: BackgroundTasks):
@@ -252,6 +194,7 @@ async def start_detection(background_tasks: BackgroundTasks):
     """
     background_tasks.add_task(detect_human_and_gesture)
     return {"message": "Human detection started in the background."}
+
 
 if __name__ == "__main__":
     uvicorn.run("init:app", host=HOST, port=PORT, reload=True)

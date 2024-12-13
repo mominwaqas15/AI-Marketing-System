@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 class HumanDetection:
-    def __init__(self, rtsp_url, output_dir, roi_coords, model_name='yolov5n', confidence_threshold=0.5, detection_duration=3):
+    def __init__(self, rtsp_url, output_dir, roi_coords, model_name='yolov5n', confidence_threshold=0.3, detection_duration=3):
         """
         Initializes the HumanDetection class.
         
@@ -55,23 +55,27 @@ class HumanDetection:
             xmin, ymin, xmax, ymax, conf, cls = det
             gesture = self.gesture_detection_model.names[int(cls)]  # Get gesture label
             print(f"Gesture detected: {gesture}, Confidence: {conf:.2f}")
-            if gesture == "hi" and conf > 0.5:
+            if gesture == "hi" or gesture == "person" and conf > 0.3:
                 return True  
 
-        return False    # Abdx's code
-        # return True       # Momin's code for testing only
+        return False
 
     def detect_humans(self):
         """
         Performs human detection on the given RTSP stream within the specified ROI.
         Saves logs and the frame with the highest confidence.
         """ 
-        
+        # FOR stream
         cap = cv2.VideoCapture(self.rtsp_url)
         if not cap.isOpened():
             print("hellooooooooooooooooooooooo")
             print("Error: Could not open RTSP stream.")
             return False ,None,None
+        # cap = cv2.VideoCapture(0)
+        # if not cap.isOpened():
+        #     print("Error: Could not open the camera.")
+        #     return False, None, None
+
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         iteration_dir = os.path.join(self.output_dir, timestamp)
@@ -96,11 +100,12 @@ class HumanDetection:
                     continue
                 # Crop the frame to the ROI
                 roi_frame = frame[self.ymin:self.ymax, self.xmin:self.xmax]
+                #roi_frame = frame
 
                 # Detect objects in the cropped ROI frame
                 results = self.person_detection_model(roi_frame)
                 detections = results.xyxy[0].cpu().numpy()  # Bounding boxes, confidence, class
-
+                #print("result from detection",results)
                 for det in detections:
                     det_xmin, det_ymin, det_xmax, det_ymax, conf, cls = det
                     if conf > self.confidence_threshold and int(cls) == 0:  # Class 0 is human
@@ -110,10 +115,10 @@ class HumanDetection:
                             best_frame = roi_frame.copy()  # Save the cropped ROI frame
                             best_bbox = (det_xmin, det_ymin, det_xmax, det_ymax)
 
-                # Process the frame for gesture detection
-                if self.process_frame_for_gesture(roi_frame):
-                    print("Hi gesture detected!")
-                    # You can perform any additional action here, e.g., sending an alert.
+                # # Process the frame for gesture detection
+                # if self.process_frame_for_gesture(roi_frame):
+                #     print("Hi gesture detected!")
+                #     # You can perform any additional action here, e.g., sending an alert.
 
                 frame_count += 1
 
