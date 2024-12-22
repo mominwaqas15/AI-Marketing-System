@@ -130,7 +130,7 @@ def schedule_task():
 
 
 @app.on_event("startup")
-def start_scheduler():
+async def start_scheduler():
     """
     Start the scheduler thread when the FastAPI server starts.
     """
@@ -138,8 +138,9 @@ def start_scheduler():
     scheduler_thread.start()
     print("Scheduler started.")
 
-    # Automatically start human detection on startup
-    asyncio.run(start_detection(BackgroundTasks()))
+    # Use asyncio.create_task instead of asyncio.run to avoid event loop issues
+    asyncio.create_task(start_detection(BackgroundTasks()))
+
 
 @app.post("/start-detection")
 async def start_detection(background_tasks: BackgroundTasks):
