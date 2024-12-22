@@ -5,7 +5,7 @@ import httpx
 import uvicorn
 import asyncio
 import schedule
-from threading import Thread
+from threading import Thread, Lock
 from ChatServices import Model
 from dotenv import load_dotenv
 from helper import generate_qr_code
@@ -45,6 +45,7 @@ ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates
 # Global variables
 sessiontoken = None
 bestframe = None
+lock = Lock()  # Lock for thread-safe global variable access
 
 app.mount("/static", StaticFiles(directory=OUTPUT_DIR), name="static")
 
@@ -87,36 +88,36 @@ def detect_human_and_gesture():
         }
 
         # Generate complement immediately after human detection
-        complement = chat_model.image_description(image_path=frame_path, token=session_token)
-        print(f"Generated complement: {complement}")
+        #complement = chat_model.image_description(image_path=frame_path, token=session_token)
+        #print(f"Generated complement: {complement}")
 
         # Step 3: Check for gestures
         print("Checking for gestures...")
         gesture_detected = detector.process_frame_for_gesture(best_frame)
 
-        if gesture_detected:
-            print("Hi gesture detected! Preparing QR code...")
-            sessiontoken = session_token  # Update global variable
-            bestframe = best_frame        # Update global variable
+        with lock:
+            if gesture_detected:
+                print("Hi gesture detected! Preparing QR code...")
+                sessiontoken = session_token  # Update global variable
+                bestframe = best_frame        # Update global variable
 
-            # Generate WhatsApp chat link
-            whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
-            qr_code_path = generate_qr_code(whatsapp_link, session_token)
+                # Generate WhatsApp chat link
+                # whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
+                # qr_code_path = generate_qr_code(whatsapp_link, session_token)
 
-            # Log the URL for debugging
-            print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
+                # Log the URL for debugging
+                #print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
 
-            message = "Hello! Welcome to our chat service. You can now continue the conversation on WhatsApp!"
-            response = whatsapp_service.send_message(message)
-            print("WhatsApp message sent:", response)
-        else:
-            print("No valid gesture detected.")
+                message = "Hello! Welcome to our chat service. You can now continue the conversation on WhatsApp!"
+                #response = whatsapp_service.send_message(message)
+                #print("WhatsApp message sent:", response)
+            else:
+                print("No valid gesture detected.")
     else:
         print("No human detected.")
-        # Ensure no frames or actions are performed
-        sessiontoken = None
-        bestframe = None
-
+        with lock:
+            sessiontoken = None
+            bestframe = None
 
 def schedule_task():
     """
@@ -136,6 +137,18 @@ def start_scheduler():
     scheduler_thread = Thread(target=schedule_task, daemon=True)
     scheduler_thread.start()
     print("Scheduler started.")
+
+    # Automatically start human detection on startup
+    asyncio.run(start_detection(BackgroundTasks()))
+
+@app.post("/start-detection")
+async def start_detection(background_tasks: BackgroundTasks):
+    """
+    Endpoint to start human and gesture detection in the background.
+    """
+    background_tasks.add_task(detect_human_and_gesture)
+    return {"message": "Human detection started in the background."}
+
 
 
 @app.get("/")
@@ -160,54 +173,34 @@ async def chat(session_token: str, user_input: str):
         return JSONResponse(status_code=500, content={"message": f"Error during chat: {str(e)}"})
 
 
-@app.get("/get-complement/{session_token}")
-async def get_complement(session_token: str, image_path: str):
-    """
-    Endpoint for generating a complement for an image.
-    """
-    if session_token not in active_chat_sessions:
-        return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
-    try:
-        response = chat_model.image_description(image_path, session_token)
-        return {"message": response}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": f"Error during complement generation: {str(e)}"})
-
 
 @app.get("/show-qr/{session_token}")
 async def show_qr_page():
     global sessiontoken, bestframe
 
-    if sessiontoken not in active_chat_sessions:
-        return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
+    with lock:
+        if sessiontoken not in active_chat_sessions:
+            return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
 
-    # Save the best frame as an image file
-    frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
-    if bestframe is not None:
-        cv2.imwrite(frame_save_path, bestframe)
-    else:
-        return JSONResponse(status_code=500, content={"message": "No frame available to process."})
+        # Save the best frame as an image file
+        frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
+        if bestframe is not None:
+            cv2.imwrite(frame_save_path, bestframe)
+            complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
+        else:
+            complement = "Welcome! Feel free to connect with us."
 
-    # Generate the QR code
-    whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
-    qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
+        # Generate the QR code
+        whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
+        qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
 
-    # Use the HTML generation function
-    html_content = generate_qr_code_page(
-        complement="Complement already generated earlier.",
-        qr_code_path=os.path.basename(qr_code_path)
-    )
+        # Use the HTML generation function
+        html_content = generate_qr_code_page(
+            complement=complement,
+            qr_code_path=os.path.basename(qr_code_path)
+        )
 
     return HTMLResponse(content=html_content)
-
-
-@app.post("/start-detection")
-async def start_detection(background_tasks: BackgroundTasks):
-    """
-    Endpoint to start human and gesture detection in the background.
-    """
-    background_tasks.add_task(detect_human_and_gesture)
-    return {"message": "Human detection started in the background."}
 
 if __name__ == "__main__":
     uvicorn.run("init:app", host=HOST, port=PORT, reload=True)

@@ -1,207 +1,174 @@
-import os
 import cv2
+import torch
+import os
 import time
-import httpx
-import uvicorn
-import asyncio
-import schedule
-from threading import Thread
-from ChatServices import Model
-from dotenv import load_dotenv
-from helper import generate_qr_code
-from fastapi.responses import JSONResponse
-from DetectionModels import HumanDetection
-from fastapi.responses import HTMLResponse
-from WhatsappService import WhatsAppService
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, BackgroundTasks, Request
-from html_generator import generate_qr_code_page
+from datetime import datetime
 
-load_dotenv()
+class HumanDetection:
+    def __init__(self, rtsp_url, output_dir, roi_coords, model_name='yolov5n', confidence_threshold=0.3, detection_duration=3):
+        """
+        Initializes the HumanDetection class.
+        
+        :param rtsp_url: RTSP stream URL for video input.
+        :param output_dir: Directory to save detection logs and frames.
+        :param roi_coords: Tuple (xmin, ymin, xmax, ymax) specifying the Region of Interest (ROI). 
+        :param model_name: Name of the YOLOv5 model to load (default: yolov5n).
+        :param confidence_threshold: Minimum confidence for detections (default: 0.5).
+        :param detection_duration: Duration (in seconds) to run detection (default: 3 seconds).
+        """
+        self.rtsp_url = rtsp_url
+        self.output_dir = output_dir
+        self.xmin, self.ymin, self.xmax, self.ymax = roi_coords
+        self.confidence_threshold = confidence_threshold
+        self.detection_duration = detection_duration
+        self.person_detection_model = torch.hub.load('ultralytics/yolov5', model_name, pretrained=True)
+        self.gesture_detection_model = self.load_gesture_detection_model()
 
-whatsapp_service = WhatsAppService()
+    def load_gesture_detection_model(self):
+        """
+        Loads the custom YOLOv5 model for gesture detection.
+        """
+        try:
+            model = torch.hub.load('ultralytics/yolov5', 'custom', path=r'best.pt')
+            print("Gesture detection model loaded successfully.")
+            return model
+        except Exception as e:
+            print(f"Error loading gesture detection model: {e}")
+            return None
 
-WEBHOOK_URL = "https://webhook.site/abaccc7d-386f-4f55-83eb-581e8e031838"
+    def process_frame_for_gesture(self, frame):
+        """
+        Processes a single frame for gesture detection using the custom model. 
+        Detects if a "hi" gesture is present.
+        
+        :param frame: The frame to process.
+        :return: True if "hi" gesture is detected with confidence > 0.5, False otherwise.
+        """
+        if not self.gesture_detection_model:
+            print("Gesture detection model is not loaded.")
+            return False
 
-app = FastAPI()
+        results = self.gesture_detection_model(frame)
+        detections = results.xyxy[0].cpu().numpy()  # Get detections
 
-origins = ["*"]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+        for det in detections:
+            xmin, ymin, xmax, ymax, conf, cls = det
+            gesture = self.gesture_detection_model.names[int(cls)]  # Get gesture label
+            print(f"Gesture detected: {gesture}, Confidence: {conf:.2f}")
+            if gesture == "hi" or gesture == "person" and conf > 0.3:
+                return True  
 
-PORT = int(os.getenv("PORT", 8000))
-HOST = os.getenv("HOST", "0.0.0.0")
+        return False
 
-RTSP_URL = "rtsp://admin:Ashton2012@41.222.89.66:560"
-OUTPUT_DIR = "Human-Detection-Logs"
-ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates
+    def detect_humans(self):
+        """
+        Performs human detection on the given RTSP stream within the specified ROI.
+        Saves logs and the frame with the highest confidence.
+        """ 
+        directories = [d for d in os.listdir(self.output_dir) if os.path.isdir(os.path.join(self.output_dir, d))]
+        if len(directories) >= 10:
+            directories.sort()  # Sort directories by name (assuming timestamp-based naming)
+            for dir_to_delete in directories[:len(directories) - 9]:
+                dir_path = os.path.join(self.output_dir, dir_to_delete)
+                try:
+                    for root, dirs, files in os.walk(dir_path, topdown=False):
+                        for file in files:
+                            os.remove(os.path.join(root, file))
+                        for dir in dirs:
+                            os.rmdir(os.path.join(root, dir))
+                    os.rmdir(dir_path)
+                    print(f"Deleted old directory: {dir_path}")
+                except Exception as e:
+                    print(f"Error deleting directory {dir_path}: {e}")
+        # FOR stream
+        cap = cv2.VideoCapture(self.rtsp_url)
+        if not cap.isOpened():
+            print("hellooooooooooooooooooooooo")
+            print("Error: Could not open RTSP stream.")
+            return False ,None,None
+        # cap = cv2.VideoCapture(0)
+        # if not cap.isOpened():
+        #     print("Error: Could not open the camera.")
+        #     return False, None, None
 
-# Global variables
-sessiontoken = None
-bestframe = None
 
-app.mount("/static", StaticFiles(directory=OUTPUT_DIR), name="static")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        iteration_dir = os.path.join(self.output_dir, timestamp)
+        os.makedirs(iteration_dir, exist_ok=True)
 
-# Initialize detection and chat model
-detector = HumanDetection(RTSP_URL, OUTPUT_DIR, ROI_COORDS)
-chat_model = Model()
+        humans_log_path = os.path.join(iteration_dir, "human_detections.txt")
+        humans_log_file = open(humans_log_path, "w")
 
-# Global variable to track ongoing chat sessions
-active_chat_sessions = {}
+        frame_count = 0
+        start_time = time.time()
 
-def clean_up_logs_and_frames():
-    """
-    Deletes old frames and logs to maintain memory efficiency.
-    """
-    logs = os.listdir(OUTPUT_DIR)
-    if len(logs) > 50:
-        for log in logs[:len(logs) - 50]:
-            log_path = os.path.join(OUTPUT_DIR, log)
-            if os.path.isfile(log_path):
-                os.remove(log_path)
+        highest_confidence = 0  # Track highest-confidence detection
+        best_frame = None  # Frame with highest-confidence detection
+        best_bbox = None  # Bounding box of the highest-confidence detection
 
-def detect_human_and_gesture():
-    global sessiontoken, bestframe
-    print("Starting human detection...")
+        try:
+            while time.time() - start_time < self.detection_duration:
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    print("Error: Failed to grab frame.")
+                    time.sleep(1)
+                    continue
+                # Crop the frame to the ROI
+                roi_frame = frame[self.ymin:self.ymax, self.xmin:self.xmax]
+                #roi_frame = frame
 
-    # Step 1: Detect human presence
-    detection_success, best_frame, frame_path = detector.detect_humans()
+                # Detect objects in the cropped ROI frame
+                results = self.person_detection_model(roi_frame)
+                detections = results.xyxy[0].cpu().numpy()  # Bounding boxes, confidence, class
+                #print("result from detection",results)
+                for det in detections:
+                    det_xmin, det_ymin, det_xmax, det_ymax, conf, cls = det
+                    if conf > self.confidence_threshold and int(cls) == 0:  # Class 0 is human
+                        print(f"Human detected in Frame {frame_count:03d} - Confidence: {conf:.2f}")
+                        if conf > highest_confidence:
+                            highest_confidence = conf
+                            best_frame = roi_frame.copy()  # Save the cropped ROI frame
+                            best_bbox = (det_xmin, det_ymin, det_xmax, det_ymax)
+                frame_count += 1
+
+        except Exception as e:
+            print(f"Error during detection: {e}")
+
+        finally:
+            cap.release()
+
+        # Save the frame with the highest confidence (if any detection occurred)
+        if best_frame is not None:
+            try:
+                frame_save_path = os.path.join(iteration_dir, "highest_confidence_frame.jpg")
+                cv2.imwrite(frame_save_path, best_frame)
+                print(f"Saved frame with the highest confidence: {highest_confidence:.2f}")
+                print(f"BBox: {best_bbox}")
+
+                humans_log_file.write(
+                    f"Frame {frame_count:03d}: Confidence: {highest_confidence:.2f}, "
+                    f"BBox: [{best_bbox[0]:.1f}, {best_bbox[1]:.1f}, {best_bbox[2]:.1f}, {best_bbox[3]:.1f}]\n"
+                )
+                humans_log_file.close()
+                return True,best_frame,frame_save_path
+            except Exception as e:
+                print(f"Error saving frame or writing to log: {e}")
+        else:
+            print("No human detected with sufficient confidence.")
+            humans_log_file.close()
+            return False, None, None
+
+
+# Example Usage
+if __name__ == "__main__":
+    rtsp_url = "rtsp://admin:Ashton2012@41.222.89.66:560"
+    output_dir = "Human-Detection-Logs"
+    roi_coords = (400, 650, 2600, 2500)  # Specify Region Of Interest coordinates 
+
+    detector = HumanDetection(rtsp_url, output_dir, roi_coords)
+    detection_success = detector.detect_humans()
 
     if detection_success:
-        print("Human detected! Generating a complement...")
-
-        session_token = chat_model.generate_token()
-        print(f"Generated session token: {session_token}")
-
-        chat_model.initialize_chat_history(session_token)
-
-        active_chat_sessions[session_token] = {
-            "frame_path": frame_path,
-            "timestamp": time.time(),
-        }
-
-        # Generate complement immediately after human detection
-        complement = chat_model.image_description(image_path=frame_path, token=session_token)
-        print(f"Generated complement: {complement}")
-
-        # Step 3: Check for gestures
-        print("Checking for gestures...")
-        gesture_detected = detector.process_frame_for_gesture(best_frame)
-
-        if gesture_detected:
-            print("Hi gesture detected! Preparing QR code...")
-            sessiontoken = session_token  # Update global variable
-            bestframe = best_frame        # Update global variable
-
-            # Generate WhatsApp chat link
-            whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
-            qr_code_path = generate_qr_code(whatsapp_link, session_token)
-
-            # Log the URL for debugging
-            print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
-
-            message = "Hello! Welcome to our chat service. You can now continue the conversation on WhatsApp!"
-            response = whatsapp_service.send_message(message)
-            print("WhatsApp message sent:", response)
-        else:
-            print("No valid gesture detected.")
+        print("Detection completed successfully.")
     else:
-        print("No human detected.")
-
-
-def schedule_task():
-    """
-    Schedule the human detection task every 20 seconds.
-    """
-    schedule.every(20).seconds.do(detect_human_and_gesture)
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
-
-
-@app.on_event("startup")
-def start_scheduler():
-    """
-    Start the scheduler thread when the FastAPI server starts.
-    """
-    scheduler_thread = Thread(target=schedule_task, daemon=True)
-    scheduler_thread.start()
-    print("Scheduler started.")
-
-
-@app.get("/")
-async def root():
-    return HTMLResponse(content="<html><body><h1>Welcome to Ashton Media!</h1></body></html>")
-
-
-@app.get("/chat/{session_token}")
-async def chat(session_token: str, user_input: str):
-    """
-    Endpoint for user chat interaction after a gesture is detected. 
-    """
-    if session_token not in active_chat_sessions:
-        return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
-    try:
-        response = chat_model.get_response(user_input, session_token)
-        return {"message": response}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": f"Error during chat: {str(e)}"})
-
-
-@app.get("/get-complement/{session_token}")
-async def get_complement(session_token: str, image_path: str):
-    """
-    Endpoint for generating a complement for an image.
-    """
-    if session_token not in active_chat_sessions:
-        return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
-    try:
-        response = chat_model.image_description(image_path, session_token)
-        return {"message": response}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"message": f"Error during complement generation: {str(e)}"})
-
-
-@app.get("/show-qr/{session_token}")
-async def show_qr_page():
-    global sessiontoken, bestframe
-
-    if sessiontoken not in active_chat_sessions:
-        return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
-
-    # Save the best frame as an image file
-    frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
-    if bestframe is not None:
-        cv2.imwrite(frame_save_path, bestframe)
-    else:
-        return JSONResponse(status_code=500, content={"message": "No frame available to process."})
-
-    # Generate the QR code
-    whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
-    qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
-
-    # Use the HTML generation function
-    html_content = generate_qr_code_page(
-        complement="Complement already generated earlier.",
-        qr_code_path=os.path.basename(qr_code_path)
-    )
-
-    return HTMLResponse(content=html_content)
-
-
-@app.post("/start-detection")
-async def start_detection(background_tasks: BackgroundTasks):
-    """
-    Endpoint to start human and gesture detection in the background.
-    """
-    background_tasks.add_task(detect_human_and_gesture)
-    return {"message": "Human detection started in the background."}
-
-if __name__ == "__main__":
-    uvicorn.run("init:app", host=HOST, port=PORT, reload=True)
+        print("Detection failed or no humans detected.")
