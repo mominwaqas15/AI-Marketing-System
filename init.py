@@ -18,7 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, BackgroundTasks, Request
 from html_generator import generate_qr_code_page
 
-
 load_dotenv()
 
 whatsapp_service = WhatsAppService()
@@ -56,6 +55,16 @@ chat_model = Model()
 # Global variable to track ongoing chat sessions
 active_chat_sessions = {}
 
+def clean_up_logs_and_frames():
+    """
+    Deletes old frames and logs to maintain memory efficiency.
+    """
+    logs = os.listdir(OUTPUT_DIR)
+    if len(logs) > 50:
+        for log in logs[:len(logs) - 50]:
+            log_path = os.path.join(OUTPUT_DIR, log)
+            if os.path.isfile(log_path):
+                os.remove(log_path)
 
 def detect_human_and_gesture():
     global sessiontoken, bestframe
@@ -76,6 +85,10 @@ def detect_human_and_gesture():
             "frame_path": frame_path,
             "timestamp": time.time(),
         }
+
+        # Generate complement immediately after human detection
+        complement = chat_model.image_description(image_path=frame_path, token=session_token)
+        print(f"Generated complement: {complement}")
 
         # Step 3: Check for gestures
         print("Checking for gestures...")
@@ -100,6 +113,9 @@ def detect_human_and_gesture():
             print("No valid gesture detected.")
     else:
         print("No human detected.")
+        # Ensure no frames or actions are performed
+        sessiontoken = None
+        bestframe = None
 
 
 def schedule_task():
@@ -124,7 +140,10 @@ def start_scheduler():
 
 @app.get("/")
 async def root():
-    return {"message": "Human and Gesture Detection API is running!"}
+    """
+    Default page shown when no human is detected.
+    """
+    return HTMLResponse(content="<html><body><h1>Welcome to Ashton Media!</h1></body></html>")
 
 
 @app.get("/chat/{session_token}")
@@ -173,18 +192,13 @@ async def show_qr_page():
     whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
     qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
 
-    # Generate complement using the chat model
-    complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
-
     # Use the HTML generation function
-    html_content = html_content = generate_qr_code_page(
-    complement=complement,
-    qr_code_path=os.path.basename(qr_code_path)
+    html_content = generate_qr_code_page(
+        complement="Complement already generated earlier.",
+        qr_code_path=os.path.basename(qr_code_path)
     )
 
-
     return HTMLResponse(content=html_content)
-
 
 
 @app.post("/start-detection")
@@ -194,7 +208,6 @@ async def start_detection(background_tasks: BackgroundTasks):
     """
     background_tasks.add_task(detect_human_and_gesture)
     return {"message": "Human detection started in the background."}
-
 
 if __name__ == "__main__":
     uvicorn.run("init:app", host=HOST, port=PORT, reload=True)
