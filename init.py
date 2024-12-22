@@ -186,7 +186,6 @@ async def show_qr_page():
     return HTMLResponse(content=html_content)
 
 
-
 @app.post("/start-detection")
 async def start_detection(background_tasks: BackgroundTasks):
     """
