@@ -74,50 +74,57 @@ def detect_human_and_gesture():
     # Step 1: Detect human presence
     detection_success, best_frame, frame_path = detector.detect_humans()
 
-    if detection_success:
-        print("Human detected! Generating a complement...")
+    session_token = chat_model.generate_token()  # Generate session token in all cases
+    print(f"Generated session token: {session_token}")
 
-        session_token = chat_model.generate_token()
-        print(f"Generated session token: {session_token}")
+    with lock:
+        if detection_success:
+            print("Human detected! Initializing session...")
 
-        chat_model.initialize_chat_history(session_token)
+            chat_model.initialize_chat_history(session_token)
 
-        active_chat_sessions[session_token] = {
-            "frame_path": frame_path,
-            "timestamp": time.time(),
-        }
+            active_chat_sessions[session_token] = {
+                "frame_path": frame_path,
+                "timestamp": time.time(),
+            }
 
-        # Generate complement immediately after human detection
-        #complement = chat_model.image_description(image_path=frame_path, token=session_token)
-        #print(f"Generated complement: {complement}")
+            # Update global variables
+            sessiontoken = session_token
+            bestframe = best_frame
 
-        # Step 3: Check for gestures
-        print("Checking for gestures...")
-        gesture_detected = detector.process_frame_for_gesture(best_frame)
+            # Step 3: Check for gestures
+            print("Checking for gestures...")
+            gesture_detected = detector.process_frame_for_gesture(best_frame)
 
-        with lock:
             if gesture_detected:
                 print("Hi gesture detected! Preparing QR code...")
-                sessiontoken = session_token  # Update global variable
-                bestframe = best_frame        # Update global variable
 
                 # Generate WhatsApp chat link
-                # whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
-                # qr_code_path = generate_qr_code(whatsapp_link, session_token)
+                whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
+                qr_code_path = generate_qr_code(whatsapp_link, session_token)
 
                 # Log the URL for debugging
-                #print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
+                print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
 
                 message = "Hello! Welcome to our chat service. You can now continue the conversation on WhatsApp!"
-                #response = whatsapp_service.send_message(message)
-                #print("WhatsApp message sent:", response)
+                # Uncomment this line to send WhatsApp message
+                # response = whatsapp_service.send_message(message)
+                # print("WhatsApp message sent:", response)
             else:
                 print("No valid gesture detected.")
-    else:
-        print("No human detected.")
-        with lock:
-            sessiontoken = chat_model.generate_token()
+        else:
+            print("No human detected.")
+
+            # Initialize session for no detection
+            active_chat_sessions[session_token] = {
+                "frame_path": None,
+                "timestamp": time.time(),
+            }
+
+            # Update global variables
+            sessiontoken = session_token
             bestframe = None
+
 
 def schedule_task():
     """
