@@ -116,7 +116,7 @@ def detect_human_and_gesture():
     else:
         print("No human detected.")
         with lock:
-            sessiontoken = None
+            sessiontoken = chat_model.generate_token()
             bestframe = None
 
 def schedule_task():
