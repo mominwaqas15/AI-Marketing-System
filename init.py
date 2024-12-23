@@ -187,11 +187,11 @@ async def show_qr_page():
             complement = "Welcome! Feel free to connect with us."  # Placeholder complement
             # Save the best frame as an image file
             frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
-            if bestframe is not None:
-                cv2.imwrite(frame_save_path, bestframe)
-                complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
-            else:
-                complement = "Hello! We detected someone, but there is no frame available."
+        if bestframe is not None:
+            cv2.imwrite(frame_save_path, bestframe)
+            complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
+        else:
+            complement = "Hello! We detected someone, but there is no frame available."
 
         # Generate the QR code
         whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
