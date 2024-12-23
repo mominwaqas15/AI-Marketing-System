@@ -74,52 +74,51 @@ def detect_human_and_gesture():
     # Step 1: Detect human presence
     detection_success, best_frame, frame_path = detector.detect_humans()
 
-    session_token = chat_model.generate_token()  # Generate session token in all cases
-    print(f"Generated session token: {session_token}")
+    # Generate a session token for cases with no detection
+    new_session_token = chat_model.generate_token()
+    print(f"Generated session token: {new_session_token}")
 
     with lock:
         if detection_success:
-            print("Human detected! Initializing session...")
+            if sessiontoken is None or sessiontoken not in active_chat_sessions:
+                # If no previous session or previous session expired, create a new one
+                sessiontoken = new_session_token
+                print(f"New person detected. Session token set: {sessiontoken}")
 
-            chat_model.initialize_chat_history(session_token)
+                chat_model.initialize_chat_history(sessiontoken)
 
-            active_chat_sessions[session_token] = {
-                "frame_path": frame_path,
-                "timestamp": time.time(),
-            }
+                active_chat_sessions[sessiontoken] = {
+                    "frame_path": frame_path,
+                    "timestamp": time.time(),
+                }
 
-            # Update global variables
-            sessiontoken = session_token
-            bestframe = best_frame
+                bestframe = best_frame
 
-            # Step 3: Check for gestures
-            print("Checking for gestures...")
-            gesture_detected = detector.process_frame_for_gesture(best_frame)
+                # Step 3: Check for gestures
+                print("Checking for gestures...")
+                gesture_detected = detector.process_frame_for_gesture(best_frame)
 
-            if gesture_detected:
-                print("Hi gesture detected! Preparing QR code...")
+                if gesture_detected:
+                    print("Hi gesture detected! Preparing QR code...")
 
-                # Generate WhatsApp chat link
-                whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
-                qr_code_path = generate_qr_code(whatsapp_link, session_token)
+                    # Generate WhatsApp chat link
+                    whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
+                    qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
 
-                # Log the URL for debugging
-                print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
-
-                message = "Hello! Welcome to our chat service. You can now continue the conversation on WhatsApp!"
+                    # Log the URL for debugging
+                    print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr")
+                else:
+                    print("No valid gesture detected.")
             else:
-                print("No valid gesture detected.")
+                print("Person already detected. Keeping the existing session token.")
         else:
             print("No human detected.")
-
-            # Initialize session for no detection
-            active_chat_sessions[session_token] = {
+            # For no detection, ensure a new session is generated
+            sessiontoken = new_session_token
+            active_chat_sessions[sessiontoken] = {
                 "frame_path": None,
                 "timestamp": time.time(),
             }
-
-            # Update global variables
-            sessiontoken = session_token
             bestframe = None
 
 
@@ -127,7 +126,7 @@ def schedule_task():
     """
     Schedule the human detection task every 20 seconds.
     """
-    schedule.every(20).seconds.do(detect_human_and_gesture)
+    schedule.every(10).seconds.do(detect_human_and_gesture)
     while True:
         schedule.run_pending()
         time.sleep(1)
@@ -185,7 +184,7 @@ async def show_qr_page():
 
     with lock:
         # Ensure a valid session token exists
-        if sessiontoken not in active_chat_sessions:
+        if not sessiontoken or sessiontoken not in active_chat_sessions:
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         # Save the best frame as an image file
