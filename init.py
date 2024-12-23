@@ -107,9 +107,6 @@ def detect_human_and_gesture():
                 print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr/{session_token}")
 
                 message = "Hello! Welcome to our chat service. You can now continue the conversation on WhatsApp!"
-                # Uncomment this line to send WhatsApp message
-                # response = whatsapp_service.send_message(message)
-                # print("WhatsApp message sent:", response)
             else:
                 print("No valid gesture detected.")
         else:
@@ -182,13 +179,14 @@ async def chat(session_token: str, user_input: str):
 
 
 
-@app.get("/show-qr/{session_token}")
+@app.get("/show-qr")
 async def show_qr_page():
     global sessiontoken, bestframe
 
     with lock:
+        # Ensure a valid session token exists
         if sessiontoken not in active_chat_sessions:
-            return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
+            return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         # Save the best frame as an image file
         frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
@@ -209,6 +207,7 @@ async def show_qr_page():
         )
 
     return HTMLResponse(content=html_content)
+
 
 if __name__ == "__main__":
     uvicorn.run("init:app", host=HOST, port=PORT, reload=True)

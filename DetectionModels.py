@@ -103,7 +103,7 @@ class HumanDetection:
         start_time = time.time()
 
         highest_confidence = 0  # Track highest-confidence detection
-        best_frame = None  # Frame with highest-confidence detection
+        best_frame = None  
         best_bbox = None  # Bounding box of the highest-confidence detection
 
         try:
