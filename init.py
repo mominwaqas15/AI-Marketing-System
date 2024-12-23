@@ -74,14 +74,14 @@ def detect_human_and_gesture():
     # Step 1: Detect human presence
     detection_success, best_frame, frame_path = detector.detect_humans()
 
-    # Generate a session token for cases with no detection
+    # Generate a new session token for fallback
     new_session_token = chat_model.generate_token()
-    print(f"Generated session token: {new_session_token}")
 
     with lock:
         if detection_success:
-            if sessiontoken is None or sessiontoken not in active_chat_sessions:
-                # If no previous session or previous session expired, create a new one
+            # If a human is detected
+            if sessiontoken not in active_chat_sessions or active_chat_sessions[sessiontoken].get("is_placeholder", True):
+                # Create a new session only if there is no active session or the active session is a placeholder
                 sessiontoken = new_session_token
                 print(f"New person detected. Session token set: {sessiontoken}")
 
@@ -90,36 +90,24 @@ def detect_human_and_gesture():
                 active_chat_sessions[sessiontoken] = {
                     "frame_path": frame_path,
                     "timestamp": time.time(),
+                    "is_placeholder": False,  # Indicates this is a real session
                 }
 
                 bestframe = best_frame
-
-                # Step 3: Check for gestures
-                print("Checking for gestures...")
-                gesture_detected = detector.process_frame_for_gesture(best_frame)
-
-                if gesture_detected:
-                    print("Hi gesture detected! Preparing QR code...")
-
-                    # Generate WhatsApp chat link
-                    whatsapp_link = f"https://wa.me/{os.getenv('TWILIO_PHONE_NUMBER_FOR_LINK')}?text=Hi!%20I'm%20interested%20in%20chatting."
-                    qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
-
-                    # Log the URL for debugging
-                    print(f"Chat session started. QR Code page available at: http://{HOST}:{PORT}/show-qr")
-                else:
-                    print("No valid gesture detected.")
             else:
                 print("Person already detected. Keeping the existing session token.")
         else:
-            print("No human detected.")
-            # For no detection, ensure a new session is generated
+            # If no human is detected, generate a new session token for placeholder logic
             sessiontoken = new_session_token
+            print("No human detected. Generating placeholder session token.")
+
             active_chat_sessions[sessiontoken] = {
                 "frame_path": None,
                 "timestamp": time.time(),
+                "is_placeholder": True,  # Indicates this is a placeholder session
             }
             bestframe = None
+
 
 
 def schedule_task():
@@ -187,13 +175,19 @@ async def show_qr_page():
         if not sessiontoken or sessiontoken not in active_chat_sessions:
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
-        # Save the best frame as an image file
-        frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
-        if bestframe is not None:
-            cv2.imwrite(frame_save_path, bestframe)
-            complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
+        session_data = active_chat_sessions[sessiontoken]
+        is_placeholder = session_data.get("is_placeholder", True)
+
+        if is_placeholder:
+            complement = "Welcome! Feel free to connect with us."  # Placeholder complement
         else:
-            complement = "Welcome! Feel free to connect with us."
+            # Save the best frame as an image file
+            frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
+            if bestframe is not None:
+                cv2.imwrite(frame_save_path, bestframe)
+                complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
+            else:
+                complement = "Hello! We detected someone, but there is no frame available."
 
         # Generate the QR code
         whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
@@ -206,6 +200,7 @@ async def show_qr_page():
         )
 
     return HTMLResponse(content=html_content)
+
 
 
 if __name__ == "__main__":
