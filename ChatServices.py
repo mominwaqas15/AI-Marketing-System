@@ -55,7 +55,10 @@ class Model:
         if token not in self.chat_sessions:
             raise ValueError("Invalid session token. Please initialize a new session.")
 
-        PROMPT = "Your task is to complement the person in the image based on their outfit or something relevant to them. Don't assume anything, give response according to the image provided."
+        PROMPT = "Your task is to complement the person in the image based on their outfit or something relevant to them. \
+        Don't assume anything, give response according \
+        to the image provided. Don't use words I can't see the image "
+                    
         base64_image = Helper.encode_image(image_path)
 
         history = self.chat_sessions[token] + [
