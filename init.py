@@ -93,7 +93,7 @@ def detect_human_and_gesture():
                     "is_placeholder": False,  # Indicates this is a real session
                 }
                 if detector.process_frame_for_gesture(best_frame):
-                    best_frame = best_frame
+                    bestframe = best_frame
             else:
                 print("Person already detected. Keeping the existing session token.")
         else:
