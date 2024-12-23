@@ -186,7 +186,7 @@ async def show_qr_page():
         if is_placeholder and bestframe is None:
             complement = "Welcome! Feel free to connect with us."  # Placeholder complement
             # Save the best frame as an image file
-            frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
+        frame_save_path = os.path.join(OUTPUT_DIR, f"{sessiontoken}_frame.jpg")
         if bestframe is not None:
             cv2.imwrite(frame_save_path, bestframe)
             complement = chat_model.image_description(image_path=frame_save_path, token=sessiontoken)
