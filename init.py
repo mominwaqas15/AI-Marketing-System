@@ -85,15 +85,15 @@ def detect_human_and_gesture():
                 sessiontoken = new_session_token
                 print(f"New person detected. Session token set: {sessiontoken}")
 
-                chat_model.initialize_chat_history(sessiontoken)
+                #chat_model.initialize_chat_history(sessiontoken)
 
                 active_chat_sessions[sessiontoken] = {
                     "frame_path": frame_path,
                     "timestamp": time.time(),
                     "is_placeholder": False,  # Indicates this is a real session
                 }
-
-                bestframe = best_frame
+                if detector.process_frame_for_gesture(best_frame):
+                    best_frame = best_frame
             else:
                 print("Person already detected. Keeping the existing session token.")
         else:
