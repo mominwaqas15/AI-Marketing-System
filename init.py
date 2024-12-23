@@ -97,16 +97,20 @@ def detect_human_and_gesture():
             else:
                 print("Person already detected. Keeping the existing session token.")
         else:
-            # If no human is detected, generate a new session token for placeholder logic
-            sessiontoken = new_session_token
-            print("No human detected. Generating placeholder session token.")
+            # If no human is detected, do not overwrite the current session token
+            if sessiontoken is None:
+                sessiontoken = new_session_token
+                print("No human detected. Generating placeholder session token.")
 
-            active_chat_sessions[sessiontoken] = {
-                "frame_path": None,
-                "timestamp": time.time(),
-                "is_placeholder": True,  # Indicates this is a placeholder session
-            }
-            bestframe = None
+                active_chat_sessions[sessiontoken] = {
+                    "frame_path": None,
+                    "timestamp": time.time(),
+                    "is_placeholder": True,  # Indicates this is a placeholder session
+                }
+                bestframe = None
+            else:
+                print("No human detected. Keeping the existing valid session token.")
+
 
 
 
@@ -178,7 +182,7 @@ async def show_qr_page():
         session_data = active_chat_sessions[sessiontoken]
         is_placeholder = session_data.get("is_placeholder", True)
 
-        if is_placeholder:
+        if is_placeholder and bestframe is None:
             complement = "Welcome! Feel free to connect with us."  # Placeholder complement
         else:
             # Save the best frame as an image file
@@ -200,7 +204,6 @@ async def show_qr_page():
         )
 
     return HTMLResponse(content=html_content)
-
 
 
 if __name__ == "__main__":
