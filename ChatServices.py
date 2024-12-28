@@ -5,6 +5,8 @@ import time
 import os
 from helper import Helper
 from dotenv import load_dotenv
+import random
+
 load_dotenv()
 
 class Model:
@@ -51,45 +53,63 @@ class Model:
         return response_str
 
     def image_description(self, image_path, token):
-        """Generate a description based on an image for a specific session."""
+        """
+        Generate and yield descriptions one by one for a specific session.
+
+        :param image_path: Path to the image.
+        :param token: Session token to track chat history.
+        :return: A generator yielding complements.
+        """
         if token not in self.chat_sessions:
             raise ValueError("Invalid session token. Please initialize a new session.")
 
-        PROMPT = "Your task is to complement the person in the image based on their outfit or something relevant to them. \
-        Don't assume anything, give response according \
-        to the image provided. Don't use words I can't see the image "
-                    
-        base64_image = Helper.encode_image(image_path)
-
-        history = self.chat_sessions[token] + [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": f"Given the following base64-encoded image + {PROMPT}"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}},
-                ],
-            }
-        ]
-
-        response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            temperature=0.7,
-            max_tokens=5000,
-            messages=history,
-            stream=True,
+        PROMPT_BASE = (
+            "Your task is to complement the person in the image based on their outfit or something relevant to them. "
+            "Don't assume anything; give a response according to the image provided. "
+            "Avoid words like 'I can't see the image'."
         )
 
-        response_str = ""
-        for chunk in response:
-            if chunk.choices[0].delta.content is not None:
-                response_str += chunk.choices[0].delta.content
-                print(chunk.choices[0].delta.content, end="", flush=True)
-                time.sleep(0.02)
+        # Encode the image to base64
+        base64_image = Helper.encode_image(image_path)
 
-        # Add AI response to chat history
-        self.chat_sessions[token].append({"role": "assistant", "content": response_str})
-        print()  # Newline after response
-        return response_str
+        # List of topics to focus on
+        Things_to_talk_about = ["outfit", "shoes", "attitude in the environment"]
+        
+        for topic in Things_to_talk_about:
+            # Add slight variations to the prompt for diversity
+            variation_prompt = (
+                PROMPT_BASE + f" You can talk about the person's {topic}. Change your tone a bit while being friendly, inviting, and respectful."
+            )
+
+            history = self.chat_sessions[token] + [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Given the following base64-encoded image + {variation_prompt}"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ],
+                }
+            ]
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0.9,  # Slightly higher temperature for more diverse outputs
+                max_tokens=500,
+                messages=history,
+                stream=True,
+            )
+
+            # Stream and collect the AI's response
+            response_str = ""
+            for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    response_str += chunk.choices[0].delta.content
+
+            # Update chat history
+            self.chat_sessions[token].append({"role": "assistant", "content": response_str.strip()})
+
+            # Yield the generated complement
+            yield response_str.strip()
 
 
 # Main interactive loop
