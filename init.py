@@ -17,6 +17,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, BackgroundTasks, Request
 from html_generator import generate_qr_code_page
+from twilio.twiml.messaging_response import MessagingResponse
+import sms
 
 load_dotenv()
 
@@ -122,6 +124,28 @@ async def start_scheduler():
 
     # Use asyncio.create_task instead of asyncio.run to avoid event loop issues
     asyncio.create_task(start_detection(BackgroundTasks()))
+
+@app.post("/webhook")
+async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Handle incoming messages from WhatsApp.
+    """
+    form = await request.form()
+    from_number = form.get("From")  # WhatsApp sender
+    body = form.get("Body")  # Message content
+
+    print(f"Received message from {from_number}: {body}")
+
+    # Generate a response message
+    response_message = f"Hi! You said: {body}"
+
+    # Add the response to the background task
+    background_tasks.add_task(sms.send_whatsapp_message, to_number=from_number, message=response_message)
+
+    # Respond to Twilio
+    response = MessagingResponse()
+    response.message("Thanks for your message! We'll get back to you shortly.")
+    return HTMLResponse(content=str(response), status_code=200)
 
 @app.post("/start-detection")
 async def start_detection(background_tasks: BackgroundTasks):
