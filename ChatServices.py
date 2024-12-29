@@ -48,7 +48,7 @@ class Model:
         )
 
         # Extract the response text from the returned object
-        response_str = response['choices'][0]['message']['content']
+        response_str = response.choices[0].message.content
 
         # Add the AI's response to the session's chat history
         self.chat_sessions[token].append({"role": "assistant", "content": response_str})
