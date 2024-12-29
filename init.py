@@ -171,7 +171,7 @@ async def whatsapp_webhook(request: Request):
 
     # Respond to Twilio
     response = MessagingResponse()
-    response.message("Thanks for your message! We'll get back to you shortly.")
+    #response.message("Thanks for your message! We'll get back to you shortly.")
     return HTMLResponse(content=str(response), status_code=200)
 
 
