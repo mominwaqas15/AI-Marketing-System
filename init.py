@@ -123,6 +123,7 @@ async def whatsapp_worker():
 
             # Personalize the message with a complement
             personalized_message = message
+            complements = "Your golden hair looks nice!"
             if complements:
                 personalized_message += f"\n\nHere's something for you: {random.choice(complements)}"
 
@@ -131,7 +132,6 @@ async def whatsapp_worker():
             print(f"Failed to send WhatsApp message to {to_number}: {e}")
         finally:
             whatsapp_message_queue.task_done()
-
 
 def schedule_task():
     """
