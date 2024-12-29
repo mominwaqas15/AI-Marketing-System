@@ -13,9 +13,9 @@ async def send_whatsapp_message(to_number: str, message: str):
     """
     try:
         message = twilio_client.messages.create(
-            from_=os.getenv("TWILIO_PHONE_NUMBER"),
+            from_=f"whatsapp:{os.getenv('TWILIO_PHONE_NUMBER')}",  # Ensure 'whatsapp:' prefix
             body=message,
-            to=to_number
+            to=f"whatsapp:{to_number}"  # Ensure 'whatsapp:' prefix
         )
         print(f"Message sent successfully: {message.sid}")
     except Exception as e:

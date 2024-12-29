@@ -203,5 +203,61 @@ async def show_qr_page():
 
     return HTMLResponse(content=html_content)
 
+from fastapi.responses import HTMLResponse
+from helper import generate_qr_code  # Assuming you already have this function
+
+@app.get("/test-qr")
+async def test_whatsapp_qr_code():
+    """
+    Generate a QR code for sending a WhatsApp message.
+    """
+    
+
+    # Generate WhatsApp link with pre-filled message
+    whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
+
+    # Generate QR code for the WhatsApp link
+    qr_code_path = generate_qr_code(url=whatsapp_link, session_token="test")
+
+    # HTML content to display the QR code
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WhatsApp QR Code</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+            }}
+            .container {{
+                text-align: center;
+            }}
+            img {{
+                max-width: 300px;
+                margin-bottom: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Scan the QR Code to Message on WhatsApp</h1>
+            <img src="/static/{qr_code_path}" alt="WhatsApp QR Code">
+            <p>Or click the link below:</p>
+            <a href="{whatsapp_link}" target="_blank">{whatsapp_link}</a>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+
+
 if __name__ == "__main__":
     uvicorn.run("init:app", host=HOST, port=PORT, reload=True)
