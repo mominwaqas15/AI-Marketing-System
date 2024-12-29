@@ -74,45 +74,61 @@ def clean_up_logs_and_frames():
                 os.remove(log_path)
 
 def detect_human_and_gesture():
-    global sessiontoken, bestframe, complement_queue
+    """
+    Detects humans and gestures, initializes or updates session data,
+    and generates or assigns complements for the session.
+    """
+    global sessiontoken, bestframe
 
     print("Starting human detection...")
     detection_success, best_frame, frame_path = detector.detect_humans()
 
+    # Generate a new session token
     new_session_token = chat_model.generate_token()
     sessiontoken = new_session_token
 
     print(f"Session Token Initialized: {sessiontoken}")
 
     with lock:
-        if detection_success:
-            active_chat_sessions[sessiontoken] = {
-                "frame_path": frame_path,
-                "timestamp": time.time(),
-                "is_placeholder": False,
-            }
-            if detector.process_frame_for_gesture(best_frame):
-                bestframe = best_frame
-
-                # Initialize complement queue as a generator
-                complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-
-                # Store complements in a list for the session and yield as they are generated
-                active_chat_sessions[sessiontoken]["complements"] = []
-                for complement in complement_generator:
-                    active_chat_sessions[sessiontoken]["complements"].append(complement)
-                    print(f"Generated complement: {complement}")
-            else:
-                print("Gesture detected but no valid complements generated.")
-        else:
-            active_chat_sessions[sessiontoken]["complements"] = ["You have beautiful golden hair.", "I really like your red shirt!", "Your chelsea boots give a great vibe."]
-
+        # Initialize the session in active_chat_sessions
+        if sessiontoken not in active_chat_sessions:
             active_chat_sessions[sessiontoken] = {
                 "frame_path": None,
                 "timestamp": time.time(),
                 "is_placeholder": True,
+                "complements": [],
             }
-            bestframe = None
+
+        if detection_success:
+            # Update session with detection details
+            active_chat_sessions[sessiontoken].update({
+                "frame_path": frame_path,
+                "timestamp": time.time(),
+                "is_placeholder": False,
+            })
+
+            if detector.process_frame_for_gesture(best_frame):
+                bestframe = best_frame
+
+                # Generate complements for detected human and save them in the session
+                complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
+                active_chat_sessions[sessiontoken]["complements"] = list(complement_generator)
+
+                print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
+            else:
+                print("Gesture detected but no valid complements generated.")
+        else:
+            best_frame = None
+            print("No human detected. Initializing session with default complements.")
+            # Assign default complements for placeholder session
+            active_chat_sessions[sessiontoken]["complements"] = [
+                "You have beautiful golden hair.",
+                "I really like your red shirt!",
+                "Your chelsea boots give a great vibe.",
+            ]
+
+        # Log the current session details
+        print(f"Session {sessiontoken} details: {active_chat_sessions[sessiontoken]}")
 
 
 async def whatsapp_worker():
@@ -203,7 +219,7 @@ async def show_qr_page():
 
     with lock:
         if not sessiontoken:
-            print("\n\n\nno session token\n\n\n")
+            # print("\n\n\nno session token\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         if sessiontoken not in active_chat_sessions:
