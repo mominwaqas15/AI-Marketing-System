@@ -125,7 +125,8 @@ async def whatsapp_worker():
             personalized_message = message
             complements = "Your golden hair looks nice!"
             if complements:
-                personalized_message += f"\n\nHere's something for you: {random.choice(complements)}"
+                # personalized_message += f"\n\nHere's something for you: {random.choice(complements)}"
+                personalized_message += f"\n\nHere's something for you: {complements}"
 
             await sms.send_whatsapp_message(to_number, personalized_message)
         except Exception as e:
