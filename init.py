@@ -105,6 +105,8 @@ def detect_human_and_gesture():
             else:
                 print("Gesture detected but no valid complements generated.")
         else:
+            active_chat_sessions[sessiontoken]["complements"] = ["You have beautiful golden hair.", "I really like your red shirt!", "Your chelsea boots give a great vibe."]
+
             active_chat_sessions[sessiontoken] = {
                 "frame_path": None,
                 "timestamp": time.time(),
@@ -123,10 +125,8 @@ async def whatsapp_worker():
 
             # Personalize the message with a complement
             personalized_message = message
-            complements = "Your golden hair looks nice!"
             if complements:
-                # personalized_message += f"\n\nHere's something for you: {random.choice(complements)}"
-                personalized_message += f"\n\nHere's something for you: {complements}"
+                personalized_message += f"\n\nHere's something for you: {random.choice(complements)}"
 
             await sms.send_whatsapp_message(to_number, personalized_message)
         except Exception as e:
@@ -163,17 +163,16 @@ async def whatsapp_webhook(request: Request):
     from_number = form.get("From")
     body = form.get("Body")
 
+    # Initialize or retrieve chat history
     gpt.initialize_chat_history(from_number)
-    session_data = gpt.chat_sessions[from_number]
 
-    # Add a complement to the context if available
-    complements = session_data.get("complements", [])
-    if complements:
-        body += f"\n\nFYI: Here's something you might like: {random.choice(complements)}"
-
+    # Complements are added as context by get_response
     gpt_response = gpt.get_response(user_input=body, phone_number=from_number)
+
+    # Queue the response for WhatsApp
     await whatsapp_message_queue.put((from_number, gpt_response))
 
+    # Respond to Twilio
     response = MessagingResponse()
     return HTMLResponse(content=str(response), status_code=200)
 

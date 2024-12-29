@@ -46,13 +46,22 @@ class Model:
                 self.chat_sessions[phone_number]["ai_chats"].append(content)
 
     def get_response(self, user_input, phone_number):
-        """Generate a response to the user's input for a specific phone number."""
+        """
+        Generate a response to the user's input for a specific phone number,
+        using complements as part of the conversation context.
+        """
         if phone_number not in self.chat_sessions:
             self.initialize_chat_history(phone_number)
 
+        # Add complements to the context if available
+        complements = self.chat_sessions[phone_number].get("complements", [])
+        if complements:
+            context = f"Here's some context: {' '.join(complements)}"
+            self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": context})
+
         # Add user input to the session's chat history
         self.chat_sessions[phone_number]["history"].append({"role": "user", "content": user_input})
-        self.save_chat(phone_number, "user", user_input)  # Save user input in session
+        self.save_chat(phone_number, "user", user_input)
 
         # Generate response
         response = self.client.chat.completions.create(
@@ -66,10 +75,9 @@ class Model:
 
         # Add the AI's response to the session's chat history
         self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": response_str})
-        self.save_chat(phone_number, "assistant", response_str)  # Save AI response in session
+        self.save_chat(phone_number, "assistant", response_str)
 
         return response_str
-
 
     def image_description(self, image_path, token):
         """
