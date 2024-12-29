@@ -203,9 +203,11 @@ async def show_qr_page():
 
     with lock:
         if not sessiontoken:
+            print("\n\n\nno session token\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         if sessiontoken not in active_chat_sessions:
+            print("\n\n\nnot in active sessions\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         session_data = active_chat_sessions[sessiontoken]
