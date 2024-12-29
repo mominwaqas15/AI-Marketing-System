@@ -210,11 +210,11 @@ async def show_qr_page():
 
     with lock:
         if not sessiontoken:
-            print("\n\n\n No Session Token!!!! -> ", sessiontoken, "\n\n\n")
+            # print("\n\n\n No Session Token!!!! -> ", sessiontoken, "\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
         
         if sessiontoken not in active_chat_sessions:
-            print("\n\n\nsession token not in active_chat_sessions -> ", sessiontoken, "\n\n\n")
+            # print("\n\n\nsession token not in active_chat_sessions -> ", sessiontoken, "\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         session_data = active_chat_sessions[sessiontoken]
@@ -227,7 +227,7 @@ async def show_qr_page():
             complement=current_complement,
             qr_code_path=os.path.basename(qr_code_path),
             )
-            
+
             return HTMLResponse(content=html_content)
             # return JSONResponse(status_code=404, content={"message": "No valid complement available."})
 
