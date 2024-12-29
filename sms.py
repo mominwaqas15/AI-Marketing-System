@@ -14,7 +14,7 @@ async def send_whatsapp_message(to_number: str, message: str):
     try:
         # Ensure both numbers have 'whatsapp:' prefix
         formatted_to_number = f"whatsapp:{to_number}" if not to_number.startswith("whatsapp:") else to_number
-        formatted_from_number = os.getenv("TWILIO_PHONE_NUMBER")  # Should already include 'whatsapp:'
+        formatted_from_number = os.getenv("TWILIO_PHONE_NUMBER")  
 
         print(f"Sending message from {formatted_from_number} to {formatted_to_number}")
 
