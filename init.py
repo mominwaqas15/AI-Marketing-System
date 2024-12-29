@@ -148,19 +148,32 @@ async def whatsapp_webhook(request: Request):
     Handle incoming messages from WhatsApp.
     """
     form = await request.form()
-    from_number = form.get("From")
-    body = form.get("Body")
+    from_number = form.get("From")  # Sender's WhatsApp number
+    body = form.get("Body")  # User's message content
+    gpt = Model()
+    # Maintain separate chat sessions for each user
+    if from_number not in gpt.chat_sessions:
+        # Generate a new session token for a new user
+        token = gpt.generate_token()
+        gpt.initialize_chat_history(token)
+        gpt.chat_sessions[from_number] = token  # Map the phone number to the session token
+    else:
+        # Retrieve the existing token for the user
+        token = gpt.chat_sessions[from_number]
 
+    # Generate GPT response
+    gpt_response = gpt.get_response(user_input=body, token=token)
     print(f"Received message from {from_number}: {body}")
-    response_message = f"Hi! You said: {body}"
+    print(f"GPT Response: {gpt_response}")
 
-    # Add message to WhatsApp queue
-    await whatsapp_message_queue.put((from_number, response_message))
+    # Add the GPT response to the WhatsApp message queue
+    await whatsapp_message_queue.put((from_number, gpt_response))
 
     # Respond to Twilio
     response = MessagingResponse()
     response.message("Thanks for your message! We'll get back to you shortly.")
     return HTMLResponse(content=str(response), status_code=200)
+
 
 @app.post("/start-detection")
 async def start_detection(background_tasks: BackgroundTasks):

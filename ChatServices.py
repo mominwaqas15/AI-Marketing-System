@@ -12,14 +12,23 @@ load_dotenv()
 class Model:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.chat_sessions = {}  # Dictionary to store chat histories against tokens
-        self.system_prompt = {"role": "system", "content": "You are a chatbot for Ashton Company."}
+        self.chat_sessions = {}  # Maps phone numbers to session tokens
+        self.system_prompt = {"role": "system", "content": (
+            "You are a chatbot for Ashton Company. "
+            "You are an AI assistant designed to help users with any questions or tasks they have. "
+            "You should respond in a friendly, professional, and concise manner. "
+            "Be proactive in asking clarifying questions if the user's query is unclear, and provide examples when necessary. "
+            "If the user asks for technical explanations, provide them in simple terms, avoiding jargon. "
+            "You can handle casual conversations and provide suggestions, but always remain respectful and helpful. "
+            "If you do not know the answer, admit it honestly and guide the user on how they might find the information. "
+            "Your goal is to create a positive, engaging, and informative interaction."
+        )}
 
     def generate_token(self):
         """Generate a unique session token."""
         return str(uuid.uuid4())
 
-    def initialize_chat_history(self, token): 
+    def initialize_chat_history(self, token):
         """Initialize chat history for a specific session."""
         self.chat_sessions[token] = [self.system_prompt]
 
@@ -35,22 +44,18 @@ class Model:
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.7,
-            messages=self.chat_sessions[token], 
-            stream=True,
+            messages=self.chat_sessions[token],
         )
 
-        # Stream and collect the AI's response
-        response_str = ""
-        for chunk in response:
-            if chunk.choices[0].delta.content is not None:
-                response_str += chunk.choices[0].delta.content
-                print(chunk.choices[0].delta.content, end="", flush=True)
-                time.sleep(0.02)
+        # Extract the response text from the returned object
+        response_str = response['choices'][0]['message']['content']
 
         # Add the AI's response to the session's chat history
         self.chat_sessions[token].append({"role": "assistant", "content": response_str})
-        print()  # Newline after streaming response
+
         return response_str
+
+
 
     def image_description(self, image_path, token):
         """
