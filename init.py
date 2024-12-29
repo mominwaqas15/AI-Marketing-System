@@ -19,9 +19,11 @@ from fastapi import FastAPI, BackgroundTasks, Request
 from html_generator import generate_qr_code_page
 from twilio.twiml.messaging_response import MessagingResponse
 import sms
+from asyncio import Queue
+
 
 load_dotenv()
-
+whatsapp_message_queue = Queue()
 whatsapp_service = WhatsAppService()
 
 WEBHOOK_URL = "https://webhook.site/abaccc7d-386f-4f55-83eb-581e8e031838"
@@ -103,6 +105,19 @@ def detect_human_and_gesture():
                 }
                 bestframe = None
 
+async def whatsapp_worker():
+    """
+    Background task to process and send WhatsApp messages from the queue.
+    """
+    while True:
+        to_number, message = await whatsapp_message_queue.get()
+        try:
+            await sms.send_whatsapp_message(to_number, message)
+        except Exception as e:
+            print(f"Failed to send WhatsApp message to {to_number}: {e}")
+        finally:
+            whatsapp_message_queue.task_done()
+
 
 def schedule_task():
     """
@@ -118,6 +133,8 @@ async def start_scheduler():
     """
     Start the scheduler thread when the FastAPI server starts.
     """
+    asyncio.create_task(whatsapp_worker())
+    print("WhatsApp worker started.")
     scheduler_thread = Thread(target=schedule_task, daemon=True)
     scheduler_thread.start()
     print("Scheduler started.")
@@ -126,21 +143,19 @@ async def start_scheduler():
     asyncio.create_task(start_detection(BackgroundTasks()))
 
 @app.post("/webhook")
-async def whatsapp_webhook(request: Request, background_tasks: BackgroundTasks):
+async def whatsapp_webhook(request: Request):
     """
     Handle incoming messages from WhatsApp.
     """
     form = await request.form()
-    from_number = form.get("From")  # WhatsApp sender
-    body = form.get("Body")  # Message content
+    from_number = form.get("From")
+    body = form.get("Body")
 
     print(f"Received message from {from_number}: {body}")
-
-    # Generate a response message
     response_message = f"Hi! You said: {body}"
 
-    # Add the response to the background task
-    background_tasks.add_task(sms.send_whatsapp_message, to_number=from_number, message=response_message)
+    # Add message to WhatsApp queue
+    await whatsapp_message_queue.put((from_number, response_message))
 
     # Respond to Twilio
     response = MessagingResponse()
@@ -203,8 +218,7 @@ async def show_qr_page():
 
     return HTMLResponse(content=html_content)
 
-from fastapi.responses import HTMLResponse
-from helper import generate_qr_code  # Assuming you already have this function
+
 
 @app.get("/test-qr")
 async def test_whatsapp_qr_code():
