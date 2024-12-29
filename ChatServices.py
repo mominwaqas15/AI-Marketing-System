@@ -33,6 +33,10 @@ class Model:
                 "ai_chats": []     # List to store AI responses
             }
 
+    def generate_token(self):
+        """Generate a unique session token."""
+        return str(uuid.uuid4())                
+
     def save_chat(self, phone_number, role, content):
         """Save chats to the session."""
         if phone_number in self.chat_sessions:
