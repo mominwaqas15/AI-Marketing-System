@@ -120,12 +120,6 @@ def detect_human_and_gesture():
         else:
             best_frame = None
             print("No human detected. Initializing session with default complements.")
-            # Assign default complements for placeholder session
-            active_chat_sessions[sessiontoken]["complements"] = [
-                "You have beautiful golden hair.",
-                "I really like your red shirt!",
-                "Your chelsea boots give a great vibe.",
-            ]
 
         # Log the current session details
         print(f"Session {sessiontoken} details: {active_chat_sessions[sessiontoken]}")
