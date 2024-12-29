@@ -119,20 +119,13 @@ async def whatsapp_worker():
     while True:
         to_number, message = await whatsapp_message_queue.get()
         try:
-            # Retrieve session details for this user
-            session_data = active_chat_sessions.get(to_number, {})
-            complements = session_data.get("complements", [])
-
-            # Personalize the message with a complement
-            personalized_message = message
-            if complements:
-                personalized_message += f"\n\nHere's something for you: {random.choice(complements)}"
-
-            await sms.send_whatsapp_message(to_number, personalized_message)
+            # Send the message as it is (already contextualized by get_response)
+            await sms.send_whatsapp_message(to_number, message)
         except Exception as e:
             print(f"Failed to send WhatsApp message to {to_number}: {e}")
         finally:
             whatsapp_message_queue.task_done()
+
 
 def schedule_task():
     """
@@ -237,7 +230,6 @@ async def show_qr_page():
         )
 
     return HTMLResponse(content=html_content)
-
 
 @app.get("/test-qr")
 async def test_whatsapp_qr_code():
