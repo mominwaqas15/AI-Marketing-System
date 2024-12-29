@@ -219,7 +219,17 @@ async def show_qr_page():
 
         session_data = active_chat_sessions[sessiontoken]
         if bestframe is None:
-            return JSONResponse(status_code=404, content={"message": "No valid complement available."})
+            current_complement = "Welcome to Ashton Media!"
+            whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
+            qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
+
+            html_content = generate_qr_code_page(
+            complement=current_complement,
+            qr_code_path=os.path.basename(qr_code_path),
+            )
+            
+            return HTMLResponse(content=html_content)
+            # return JSONResponse(status_code=404, content={"message": "No valid complement available."})
 
         try:
             # Fetch the next complement 
