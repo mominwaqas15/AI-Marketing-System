@@ -79,10 +79,12 @@ def detect_human_and_gesture():
     detection_success, best_frame, frame_path = detector.detect_humans()
 
     new_session_token = chat_model.generate_token()
+    sessiontoken = new_session_token
+
+    print(f"Session Token Initialized: {sessiontoken}")
 
     with lock:
         if detection_success:
-            sessiontoken = new_session_token
             active_chat_sessions[sessiontoken] = {
                 "frame_path": frame_path,
                 "timestamp": time.time(),
