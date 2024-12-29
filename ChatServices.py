@@ -12,7 +12,7 @@ load_dotenv()
 class Model:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.chat_sessions = {}  # Maps phone numbers to session tokens
+        self.chat_sessions = {}  # Maps phone numbers to chat histories
         self.system_prompt = {"role": "system", "content": (
             "You are a chatbot for Ashton Company. "
             "You are an AI assistant designed to help users with any questions or tasks they have. "
@@ -24,34 +24,45 @@ class Model:
             "Your goal is to create a positive, engaging, and informative interaction."
         )}
 
-    def generate_token(self):
-        """Generate a unique session token."""
-        return str(uuid.uuid4())
+    def initialize_chat_history(self, phone_number):
+        """Initialize chat history for a specific phone number."""
+        if phone_number not in self.chat_sessions:
+            self.chat_sessions[phone_number] = {
+                "history": [self.system_prompt],  # Chat history for this user
+                "user_chats": [],  # List to store user messages
+                "ai_chats": []     # List to store AI responses
+            }
 
-    def initialize_chat_history(self, token):
-        """Initialize chat history for a specific session."""
-        self.chat_sessions[token] = [self.system_prompt]
+    def save_chat(self, phone_number, role, content):
+        """Save chats to the session."""
+        if phone_number in self.chat_sessions:
+            if role == "user":
+                self.chat_sessions[phone_number]["user_chats"].append(content)
+            elif role == "assistant":
+                self.chat_sessions[phone_number]["ai_chats"].append(content)
 
-    def get_response(self, user_input, token):
-        """Generate a response to the user's input for a specific session."""
-        if token not in self.chat_sessions:
-            raise ValueError("Invalid session token. Please initialize a new session.")
+    def get_response(self, user_input, phone_number):
+        """Generate a response to the user's input for a specific phone number."""
+        if phone_number not in self.chat_sessions:
+            self.initialize_chat_history(phone_number)
 
         # Add user input to the session's chat history
-        self.chat_sessions[token].append({"role": "user", "content": user_input})
+        self.chat_sessions[phone_number]["history"].append({"role": "user", "content": user_input})
+        self.save_chat(phone_number, "user", user_input)  # Save user input in session
 
         # Generate response
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0.7,
-            messages=self.chat_sessions[token],
+            messages=self.chat_sessions[phone_number]["history"],
         )
 
         # Extract the response text from the returned object
         response_str = response.choices[0].message.content
 
         # Add the AI's response to the session's chat history
-        self.chat_sessions[token].append({"role": "assistant", "content": response_str})
+        self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": response_str})
+        self.save_chat(phone_number, "assistant", response_str)  # Save AI response in session
 
         return response_str
 

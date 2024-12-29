@@ -20,7 +20,7 @@ from html_generator import generate_qr_code_page
 from twilio.twiml.messaging_response import MessagingResponse
 import sms
 from asyncio import Queue
-
+gpt = Model()
 
 load_dotenv()
 whatsapp_message_queue = Queue()
@@ -150,29 +150,28 @@ async def whatsapp_webhook(request: Request):
     form = await request.form()
     from_number = form.get("From")  # Sender's WhatsApp number
     body = form.get("Body")  # User's message content
-    gpt = Model()
-    # Maintain separate chat sessions for each user
-    if from_number not in gpt.chat_sessions:
-        # Generate a new session token for a new user
-        token = gpt.generate_token()
-        gpt.initialize_chat_history(token)
-        gpt.chat_sessions[from_number] = token  # Map the phone number to the session token
-    else:
-        # Retrieve the existing token for the user
-        token = gpt.chat_sessions[from_number]
+
+    # Initialize or retrieve chat history for the phone number
+    
+    gpt.initialize_chat_history(from_number)
 
     # Generate GPT response
-    gpt_response = gpt.get_response(user_input=body, token=token)
+    gpt_response = gpt.get_response(user_input=body, phone_number=from_number)
     print(f"Received message from {from_number}: {body}")
     print(f"GPT Response: {gpt_response}")
+
+    # Log chat history
+    print(f"User Chats: {gpt.chat_sessions[from_number]['user_chats']}")
+    print(f"AI Chats: {gpt.chat_sessions[from_number]['ai_chats']}")
 
     # Add the GPT response to the WhatsApp message queue
     await whatsapp_message_queue.put((from_number, gpt_response))
 
     # Respond to Twilio
     response = MessagingResponse()
-    #response.message("Thanks for your message! We'll get back to you shortly.")
+    
     return HTMLResponse(content=str(response), status_code=200)
+
 
 
 @app.post("/start-detection")
