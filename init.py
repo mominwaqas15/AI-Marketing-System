@@ -207,7 +207,12 @@ async def show_qr_page():
     global sessiontoken, bestframe, complement_queue
 
     with lock:
-        if not sessiontoken or sessiontoken not in active_chat_sessions:
+        if not sessiontoken:
+            print("\n\n\n No Session Token!!!! -> ", sessiontoken, "\n\n\n")
+            return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
+        
+        if sessiontoken not in active_chat_sessions:
+            print("\n\n\nsession token not in active_chat_sessions -> ", sessiontoken, "\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         session_data = active_chat_sessions[sessiontoken]
@@ -215,7 +220,7 @@ async def show_qr_page():
             return JSONResponse(status_code=404, content={"message": "No valid complement available."})
 
         try:
-            # Fetch the next complement
+            # Fetch the next complement 
             current_complement = next(complement_queue)
         except StopIteration:
             return JSONResponse(status_code=404, content={"message": "No more complements available."})
@@ -229,8 +234,6 @@ async def show_qr_page():
         )
 
     return HTMLResponse(content=html_content)
-
-
 
 @app.get("/test-qr")
 async def test_whatsapp_qr_code():
