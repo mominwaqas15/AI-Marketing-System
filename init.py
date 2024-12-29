@@ -98,8 +98,8 @@ def detect_human_and_gesture():
             else:
                 print("Gesture detected but no valid complements generated.")
         else:
-            if sessiontoken is None:
-                sessiontoken = new_session_token
+            # if sessiontoken is None:
+            #     sessiontoken = new_session_token
                 active_chat_sessions[sessiontoken] = {
                     "frame_path": None,
                     "timestamp": time.time(),
