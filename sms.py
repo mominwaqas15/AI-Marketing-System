@@ -28,7 +28,6 @@ async def send_whatsapp_message(to_number: str, message: str):
     except Exception as e:
         print(f"Error sending message: {e}")
 
-
 # import asyncio
 
 # # Test the send_whatsapp_message function

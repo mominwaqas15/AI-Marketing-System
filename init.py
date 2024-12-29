@@ -19,6 +19,7 @@ from fastapi import FastAPI, BackgroundTasks, Request
 from html_generator import generate_qr_code_page
 from twilio.twiml.messaging_response import MessagingResponse
 import sms
+import random
 from asyncio import Queue
 gpt = Model()
 
@@ -94,27 +95,38 @@ def detect_human_and_gesture():
                 bestframe = best_frame
 
                 # Initialize complement queue as a generator
-                complement_queue = chat_model.image_description(image_path=frame_path, token=sessiontoken)
+                complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
+
+                # Store complements in a list for the session and yield as they are generated
+                active_chat_sessions[sessiontoken]["complements"] = []
+                for complement in complement_generator:
+                    active_chat_sessions[sessiontoken]["complements"].append(complement)
+                    print(f"Generated complement: {complement}")
             else:
                 print("Gesture detected but no valid complements generated.")
         else:
-            # if sessiontoken is None:
-            #     sessiontoken = new_session_token
-                active_chat_sessions[sessiontoken] = {
-                    "frame_path": None,
-                    "timestamp": time.time(),
-                    "is_placeholder": True,
-                }
-                bestframe = None
+            active_chat_sessions[sessiontoken] = {
+                "frame_path": None,
+                "timestamp": time.time(),
+                "is_placeholder": True,
+            }
+            bestframe = None
+
 
 async def whatsapp_worker():
-    """
-    Background task to process and send WhatsApp messages from the queue.
-    """
     while True:
         to_number, message = await whatsapp_message_queue.get()
         try:
-            await sms.send_whatsapp_message(to_number, message)
+            # Retrieve session details for this user
+            session_data = active_chat_sessions.get(to_number, {})
+            complements = session_data.get("complements", [])
+
+            # Personalize the message with a complement
+            personalized_message = message
+            if complements:
+                personalized_message += f"\n\nHere's something for you: {random.choice(complements)}"
+
+            await sms.send_whatsapp_message(to_number, personalized_message)
         except Exception as e:
             print(f"Failed to send WhatsApp message to {to_number}: {e}")
         finally:
@@ -146,35 +158,23 @@ async def start_scheduler():
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
-    """
-    Handle incoming messages from WhatsApp.
-    """
     form = await request.form()
-    from_number = form.get("From")  # Sender's WhatsApp number
-    body = form.get("Body")  # User's message content
+    from_number = form.get("From")
+    body = form.get("Body")
 
-    # Initialize or retrieve chat history for the phone number
-    
     gpt.initialize_chat_history(from_number)
+    session_data = gpt.chat_sessions[from_number]
 
-    # Generate GPT response
+    # Add a complement to the context if available
+    complements = session_data.get("complements", [])
+    if complements:
+        body += f"\n\nFYI: Here's something you might like: {random.choice(complements)}"
+
     gpt_response = gpt.get_response(user_input=body, phone_number=from_number)
-    print(f"Received message from {from_number}: {body}")
-    print(f"GPT Response: {gpt_response}")
-
-    # Log chat history
-    print(f"User Chats: {gpt.chat_sessions[from_number]['user_chats']}")
-    print(f"AI Chats: {gpt.chat_sessions[from_number]['ai_chats']}")
-
-    # Add the GPT response to the WhatsApp message queue
     await whatsapp_message_queue.put((from_number, gpt_response))
 
-    # Respond to Twilio
     response = MessagingResponse()
-    
     return HTMLResponse(content=str(response), status_code=200)
-
-
 
 @app.post("/start-detection")
 async def start_detection(background_tasks: BackgroundTasks):
@@ -206,46 +206,38 @@ async def chat(session_token: str, user_input: str):
 
 @app.get("/show-qr")
 async def show_qr_page():
-    global sessiontoken, bestframe, complement_queue
+    global sessiontoken, bestframe
 
     with lock:
         if not sessiontoken:
-            # print("\n\n\n No Session Token!!!! -> ", sessiontoken, "\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
-        
+
         if sessiontoken not in active_chat_sessions:
-            # print("\n\n\nsession token not in active_chat_sessions -> ", sessiontoken, "\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         session_data = active_chat_sessions[sessiontoken]
-        if bestframe is None:
+
+        # Check if complements are available
+        complements = session_data.get("complements", [])
+        if not complements:
             current_complement = "Welcome to Ashton Media!"
-            whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
-            qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
+        else:
+            # Fetch the next complement (or rotate through complements)
+            current_complement = complements.pop(0)
+            complements.append(current_complement)  # Rotate complement for reuse
 
-            html_content = generate_qr_code_page(
-            complement=current_complement,
-            qr_code_path=os.path.basename(qr_code_path),
-            )
-
-            return HTMLResponse(content=html_content)
-            # return JSONResponse(status_code=404, content={"message": "No valid complement available."})
-
-        try:
-            # Fetch the next complement 
-            current_complement = next(complement_queue)
-        except StopIteration:
-            return JSONResponse(status_code=404, content={"message": "No more complements available."})
-
+        # Generate WhatsApp QR code
         whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
         qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
 
+        # Generate HTML response with QR code and complement
         html_content = generate_qr_code_page(
             complement=current_complement,
             qr_code_path=os.path.basename(qr_code_path),
         )
 
     return HTMLResponse(content=html_content)
+
 
 @app.get("/test-qr")
 async def test_whatsapp_qr_code():

@@ -71,65 +71,67 @@ class Model:
         return response_str
 
 
-
     def image_description(self, image_path, token):
         """
-        Generate and yield descriptions one by one for a specific session.
+        Generate and yield complements based on an image for a specific session.
+        Complements are also saved in the session for later use.
 
         :param image_path: Path to the image.
         :param token: Session token to track chat history.
-        :return: A generator yielding complements.
+        :yield: Generated complement as a string.
         """
         if token not in self.chat_sessions:
             raise ValueError("Invalid session token. Please initialize a new session.")
 
         PROMPT_BASE = (
             "Your task is to complement the person in the image based on their outfit or something relevant to them. "
-            "Don't assume anything; give a response according to the image provided. "
-            "Avoid words like 'I can't see the image'."
+            "Don't assume anything; give a response according to the image provided."
         )
 
         # Encode the image to base64
         base64_image = Helper.encode_image(image_path)
 
-        # List of topics to focus on
+        # Topics to generate complements
         Things_to_talk_about = ["outfit", "shoes", "attitude in the environment"]
-        
+
+        # Ensure a complements list exists in the session
+        if "complements" not in self.chat_sessions[token]:
+            self.chat_sessions[token]["complements"] = []
+
         for topic in Things_to_talk_about:
-            # Add slight variations to the prompt for diversity
+            # Create a variation of the prompt
             variation_prompt = (
-                PROMPT_BASE + f" You can talk about the person's {topic}. Change your tone a bit while being friendly, inviting, and respectful."
+                PROMPT_BASE + f" You can talk about the person's {topic}. Be friendly, inviting, and respectful."
             )
 
-            history = self.chat_sessions[token] + [
+            # Prepare the messages with the prompt and image
+            messages = self.chat_sessions[token]["history"] + [
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": f"Given the following base64-encoded image + {variation_prompt}"},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                    ],
+                    "content": f"Given the following base64-encoded image + {variation_prompt}",
                 }
             ]
 
+            # Generate a response
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                temperature=0.9,  # Slightly higher temperature for more diverse outputs
+                temperature=0.9,  # Higher temperature for more creativity
                 max_tokens=500,
-                messages=history,
-                stream=True,
+                messages=messages,
             )
 
-            # Stream and collect the AI's response
-            response_str = ""
-            for chunk in response:
-                if chunk.choices[0].delta.content is not None:
-                    response_str += chunk.choices[0].delta.content
+            # Extract the response text
+            response_str = response.choices[0].message.content.strip()
 
-            # Update chat history
-            self.chat_sessions[token].append({"role": "assistant", "content": response_str.strip()})
+            # Save the response in the session history
+            self.chat_sessions[token]["history"].append({"role": "assistant", "content": response_str})
 
-            # Yield the generated complement
-            yield response_str.strip()
+            # Save the complement in the session
+            self.chat_sessions[token]["complements"].append(response_str)
+
+            # Yield the complement as it is generated
+            yield response_str
+
 
 
 # Main interactive loop
