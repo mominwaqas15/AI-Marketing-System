@@ -86,11 +86,11 @@ class Model:
         """
         if token not in self.chat_sessions:
             raise ValueError("Invalid session token. Please initialize a new session.")
-        
 
         PROMPT_BASE = (
             "Your task is to complement the person in the image based on their outfit or something relevant to them. "
-            "Don't assume anything; give a response according to the image provided."
+            "Don't assume anything; give a response according to the image provided. "
+            "Here is the base64 representation of the image. Use it to infer details."
         )
 
         # Encode the image to base64
@@ -106,14 +106,14 @@ class Model:
         for topic in Things_to_talk_about:
             # Create a variation of the prompt
             variation_prompt = (
-                PROMPT_BASE + f" You can talk about the person's {topic}. Be friendly, inviting, and respectful. Here's the base64-encoded image: {base64_image}."
+                PROMPT_BASE + f" Focus on the person's {topic}. Be friendly, inviting, and respectful."
             )
 
-            # Prepare the messages with the prompt and image
+            # Prepare the messages with the prompt and base64 image
             messages = self.chat_sessions[token]["history"] + [
                 {
                     "role": "user",
-                    "content": f"Given the following base64-encoded image + {variation_prompt}",
+                    "content": f"{variation_prompt}\n\nBase64 Image:\n{base64_image}"
                 }
             ]
 
@@ -136,6 +136,7 @@ class Model:
 
             # Yield the complement as it is generated
             yield response_str
+
 
 # Main interactive loop
 if __name__ == "__main__":
