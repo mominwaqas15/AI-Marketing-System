@@ -99,6 +99,9 @@ def detect_human_and_gesture():
                 "complements": [],
             }
 
+        if sessiontoken not in chat_model.chat_sessions:
+            chat_model.initialize_chat_history(sessiontoken)            
+
         if detection_success:
             # Update session with detection details
             active_chat_sessions[sessiontoken].update({
