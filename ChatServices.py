@@ -106,7 +106,7 @@ class Model:
         for topic in Things_to_talk_about:
             # Create a variation of the prompt
             variation_prompt = (
-                PROMPT_BASE + f" You can talk about the person's {topic}. Be friendly, inviting, and respectful."
+                PROMPT_BASE + f" You can talk about the person's {topic}. Be friendly, inviting, and respectful. Here's the base64-encoded image: {base64_image}."
             )
 
             # Prepare the messages with the prompt and image
@@ -136,8 +136,6 @@ class Model:
 
             # Yield the complement as it is generated
             yield response_str
-
-
 
 # Main interactive loop
 if __name__ == "__main__":
