@@ -172,15 +172,19 @@ async def whatsapp_webhook(request: Request):
     # Initialize or retrieve chat history
     gpt.initialize_chat_history(from_number)
 
-    # Complements are added as context by get_response
+    # Generate response
     gpt_response = gpt.get_response(user_input=body, phone_number=from_number)
 
-    # Queue the response for WhatsApp
-    await whatsapp_message_queue.put((from_number, gpt_response))
+    # Retrieve complements for this session
+    complements = gpt.chat_sessions[from_number].get("complements", [])
+
+    # Queue the response for WhatsApp with complements
+    await sms.send_whatsapp_message(to_number=from_number, message=gpt_response, complements=complements)
 
     # Respond to Twilio
     response = MessagingResponse()
     return HTMLResponse(content=str(response), status_code=200)
+
 
 @app.post("/start-detection")
 async def start_detection(background_tasks: BackgroundTasks):

@@ -7,26 +7,30 @@ load_dotenv()
 
 twilio_client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
 
-async def send_whatsapp_message(to_number: str, message: str):
-    """
-    Send a WhatsApp message using Twilio.
-    """
+async def send_whatsapp_message(to_number: str, message: str, complements: list = None):
     try:
+        # Add complements to the message
+        if complements:
+            personalized_message = f"{message} Also, a quick note: {' '.join(complements)}"
+        else:
+            personalized_message = message
+
         # Ensure both numbers have 'whatsapp:' prefix
         formatted_to_number = f"whatsapp:{to_number}" if not to_number.startswith("whatsapp:") else to_number
-        formatted_from_number = os.getenv("TWILIO_PHONE_NUMBER")  
+        formatted_from_number = os.getenv("TWILIO_PHONE_NUMBER")
 
         print(f"Sending message from {formatted_from_number} to {formatted_to_number}")
 
         # Send the message
-        message = twilio_client.messages.create(
+        twilio_client.messages.create(
             from_=formatted_from_number,
-            body=message,
+            body=personalized_message,
             to=formatted_to_number
         )
-        print(f"Message sent successfully: {message.sid}")
+        print(f"Message sent successfully.")
     except Exception as e:
         print(f"Error sending message: {e}")
+
 
 # import asyncio
 

@@ -46,23 +46,15 @@ class Model:
                 self.chat_sessions[phone_number]["ai_chats"].append(content)
 
     def get_response(self, user_input, phone_number):
-        """
-        Generate a response to the user's input for a specific phone number,
-        using complements as part of the conversation context.
-        """
         if phone_number not in self.chat_sessions:
             self.initialize_chat_history(phone_number)
 
         # Add complements to the context if available
         complements = self.chat_sessions[phone_number].get("complements", [])
         if complements:
-            context = f"Here's some context about the person your'e talking to: {' '.join(complements)}"
-            self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": context})
+            context_sentence = f"Here's what I noticed: {' '.join(complements)}."
+            user_input = f"{context_sentence} {user_input}"
 
-        else: 
-            context = f"Here's some context about the person your'e talking to: They look nice and bring a nice attitude in the workplace!"            
-            self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": context})
-            
         # Add user input to the session's chat history
         self.chat_sessions[phone_number]["history"].append({"role": "user", "content": user_input})
         self.save_chat(phone_number, "user", user_input)
@@ -74,14 +66,14 @@ class Model:
             messages=self.chat_sessions[phone_number]["history"],
         )
 
-        # Extract the response text from the returned object
         response_str = response.choices[0].message.content
 
-        # Add the AI's response to the session's chat history
+        # Save the AI's response
         self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": response_str})
         self.save_chat(phone_number, "assistant", response_str)
 
         return response_str
+
 
     def image_description(self, image_path, token):
         """
