@@ -88,11 +88,9 @@ class Model:
         :param token: Session token to track chat history.
         :yield: Generated complement as a string.
         """
-        # if token not in self.chat_sessions:
-        #     raise ValueError("Invalid session token. Please initialize a new session.")
-        
         if token not in self.chat_sessions:
-            self.initialize_chat_history(token)            
+            raise ValueError("Invalid session token. Please initialize a new session.")
+        
 
         PROMPT_BASE = (
             "Your task is to complement the person in the image based on their outfit or something relevant to them. "
