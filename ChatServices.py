@@ -56,9 +56,13 @@ class Model:
         # Add complements to the context if available
         complements = self.chat_sessions[phone_number].get("complements", [])
         if complements:
-            context = f"Here's some context: {' '.join(complements)}"
+            context = f"Here's some context about the person your'e talking to: {' '.join(complements)}"
             self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": context})
 
+        else: 
+            context = f"Here's some context about the person your'e talking to: They look nice and bring a nice attitude in the workplace!"            
+            self.chat_sessions[phone_number]["history"].append({"role": "assistant", "content": context})
+            
         # Add user input to the session's chat history
         self.chat_sessions[phone_number]["history"].append({"role": "user", "content": user_input})
         self.save_chat(phone_number, "user", user_input)
