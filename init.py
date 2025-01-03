@@ -45,7 +45,7 @@ HOST = os.getenv("HOST", "0.0.0.0")
 
 RTSP_URL = "rtsp://admin:Ashton2012@41.222.89.66:560"
 OUTPUT_DIR = "Human-Detection-Logs"
-ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates
+ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates  
 
 # Global variables
 sessiontoken = None
@@ -115,7 +115,8 @@ def detect_human_and_gesture():
 
                 # Generate complements for detected human and save them in the session
                 complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-                active_chat_sessions[sessiontoken]["complements"] = list(complement_generator)
+                # active_chat_sessions[sessiontoken]["complements"] = list(complement_generator)
+                active_chat_sessions[sessiontoken]["complements"] = complement_generator
 
                 print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
             else:
@@ -230,13 +231,14 @@ async def show_qr_page():
         session_data = active_chat_sessions[sessiontoken]
 
         # Check if complements are available
-        complements = session_data.get("complements", [])
+        complements = list(session_data.get("complements", []))  # Convert to a list
         if not complements:
             current_complement = "Welcome to Ashton Media!"
         else:
-            # Fetch the next complement (or rotate through complements)
             current_complement = complements.pop(0)
             complements.append(current_complement)  # Rotate complement for reuse
+
+        session_data["complements"] = complements                        
 
         # Generate WhatsApp QR code
         whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'

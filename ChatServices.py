@@ -35,7 +35,15 @@ class Model:
 
     def generate_token(self):
         """Generate a unique session token."""
-        return str(uuid.uuid4())                
+        return str(uuid.uuid4())    
+
+    def ensure_session_initialized(self, token):
+        """Ensure that the session is initialized with default values."""
+        if token not in self.chat_sessions:
+            self.chat_sessions[token] = {
+                "history": [],
+                "complements": [],
+            }            
 
     def save_chat(self, phone_number, role, content):
         """Save chats to the session."""
@@ -77,67 +85,62 @@ class Model:
 
     def image_description(self, image_path, token):
         """
-        Generate and yield complements based on an image for a specific session.
-        Complements are also saved in the session for later use.
+        Generate and yield descriptions one by one for a specific session.
 
         :param image_path: Path to the image.
         :param token: Session token to track chat history.
-        :yield: Generated complement as a string.
+        :return: A generator yielding complements.
         """
-        if token not in self.chat_sessions:
-            raise ValueError("Invalid session token. Please initialize a new session.")
 
         PROMPT_BASE = (
             "Your task is to complement the person in the image based on their outfit or something relevant to them. "
             "Don't assume anything; give a response according to the image provided. "
-            "Here is the base64 representation of the image. Use it to infer details."
+            "Avoid words like 'I can't see the image'."
         )
 
         # Encode the image to base64
         base64_image = Helper.encode_image(image_path)
 
-        # Topics to generate complements
+        # List of topics to focus on
         Things_to_talk_about = ["outfit", "shoes", "attitude in the environment"]
-
-        # Ensure a complements list exists in the session
-        if "complements" not in self.chat_sessions[token]:
-            self.chat_sessions[token]["complements"] = []
-
+        
         for topic in Things_to_talk_about:
-            # Create a variation of the prompt
+            # Add slight variations to the prompt for diversity
             variation_prompt = (
-                PROMPT_BASE + f" Focus on the person's {topic}. Be friendly, inviting, and respectful."
+                PROMPT_BASE + f" You can talk about the person's {topic}. Change your tone a bit while being friendly, inviting, and respectful."
             )
 
-            # Prepare the messages with the prompt and base64 image
-            messages = self.chat_sessions[token]["history"] + [
+            self.ensure_session_initialized(token)
+            history = self.chat_sessions[token]["history"] + [
                 {
                     "role": "user",
-                    "content": f"{variation_prompt}\n\nBase64 Image:\n{base64_image}"
+                    "content": [
+                        {"type": "text", "text": f"Given the following base64-encoded image + {variation_prompt}"},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ],
                 }
             ]
 
-            # Generate a response
+
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
-                temperature=0.9,  # Higher temperature for more creativity
+                temperature=0.9,  # Slightly higher temperature for more diverse outputs
                 max_tokens=500,
-                messages=messages,
+                messages=history,
+                stream=True,
             )
 
-            # Extract the response text
-            response_str = response.choices[0].message.content.strip()
+            # Stream and collect the AI's response
+            response_str = ""
+            for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    response_str += chunk.choices[0].delta.content
 
-            # Save the response in the session history
-            self.chat_sessions[token]["history"].append({"role": "assistant", "content": response_str})
+            # Update chat history
+            self.chat_sessions[token]["history"].append({"role": "assistant", "content": response_str.strip()})
 
-            # Save the complement in the session
-            self.chat_sessions[token]["complements"].append(response_str)
-
-            # Yield the complement as it is generated
-            yield response_str
-
-
+            # Yield the generated complement
+            yield response_str.strip()
 # Main interactive loop
 if __name__ == "__main__":
     model = Model()

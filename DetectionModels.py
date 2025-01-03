@@ -67,7 +67,7 @@ class HumanDetection:
         """ 
         directories = [d for d in os.listdir(self.output_dir) if os.path.isdir(os.path.join(self.output_dir, d))]
         if len(directories) >= 10:
-            directories.sort()  # Sort directories by name (assuming timestamp-based naming)
+            directories.sort()  # Sort directories by name (assuming timestamp-based naming)  
             for dir_to_delete in directories[:len(directories) - 9]:
                 dir_path = os.path.join(self.output_dir, dir_to_delete)
                 try:
@@ -80,8 +80,13 @@ class HumanDetection:
                     print(f"Deleted old directory: {dir_path}")
                 except Exception as e:
                     print(f"Error deleting directory {dir_path}: {e}")
+        
         # FOR stream
         cap = cv2.VideoCapture(self.rtsp_url)
+
+        # For Machine Camera
+        # cap = cv2.VideoCapture(0)
+
         if not cap.isOpened():
             print("hellooooooooooooooooooooooo")
             print("Error: Could not open RTSP stream.")
@@ -115,7 +120,7 @@ class HumanDetection:
                     continue
                 # Crop the frame to the ROI
                 roi_frame = frame[self.ymin:self.ymax, self.xmin:self.xmax]
-                #roi_frame = frame
+                # roi_frame = frame
 
                 # Detect objects in the cropped ROI frame
                 results = self.person_detection_model(roi_frame)
