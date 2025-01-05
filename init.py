@@ -21,6 +21,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 import sms
 import random
 from asyncio import Queue
+
 gpt = Model()
 
 load_dotenv()
@@ -143,9 +144,9 @@ async def whatsapp_worker():
 
 def schedule_task():
     """
-    Schedule the human detection task every 20 seconds.
+    Schedule the human detection task every 3 seconds.
     """
-    schedule.every(10).seconds.do(detect_human_and_gesture)
+    schedule.every(3).seconds.do(detect_human_and_gesture)
     while True:
         schedule.run_pending()
         time.sleep(1)
