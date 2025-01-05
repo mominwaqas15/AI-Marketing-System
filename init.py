@@ -144,9 +144,7 @@ async def whatsapp_worker():
 async def detection_task():
     while True:
         detect_human_and_gesture()
-        await asyncio.sleep(2)
-
-
+        await asyncio.sleep(1)
 
 @app.on_event("startup")
 async def start_scheduler():
