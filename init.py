@@ -141,29 +141,18 @@ async def whatsapp_worker():
         finally:
             whatsapp_message_queue.task_done()
 
-
-def schedule_task():
-    """
-    Schedule the human detection task every 3 seconds.
-    """
-    schedule.every(3).seconds.do(detect_human_and_gesture)
+async def detection_task():
     while True:
-        schedule.run_pending()
-        time.sleep(1)
+        detect_human_and_gesture()
+        await asyncio.sleep(2)
+
+
 
 @app.on_event("startup")
 async def start_scheduler():
-    """
-    Start the scheduler thread when the FastAPI server starts.
-    """
     asyncio.create_task(whatsapp_worker())
-    print("WhatsApp worker started.")
-    scheduler_thread = Thread(target=schedule_task, daemon=True)
-    scheduler_thread.start()
-    print("Scheduler started.")
-
-    # Use asyncio.create_task instead of asyncio.run to avoid event loop issues
-    asyncio.create_task(start_detection(BackgroundTasks()))
+    asyncio.create_task(detection_task())
+    print("Schedulers started.")
 
 @app.post("/webhook")
 async def whatsapp_webhook(request: Request):
@@ -206,7 +195,7 @@ async def root():
 @app.get("/chat/{session_token}")
 async def chat(session_token: str, user_input: str):
     """
-    Endpoint for user chat interaction after a gesture is detected. 
+    Endpoint for user chat interaction after a gesture is detected .
     """
     if session_token not in active_chat_sessions:
         return JSONResponse(status_code=404, content={"message": "Invalid session token or session expired."})
