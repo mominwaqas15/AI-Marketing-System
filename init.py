@@ -8,7 +8,7 @@ import schedule
 from threading import Thread, Lock, Timer
 from ChatServices import Model
 from dotenv import load_dotenv
-from helper import generate_qr_code
+from helper import generate_qr_code, generate_QR
 from fastapi.responses import JSONResponse
 from DetectionModels import HumanDetection
 from fastapi.responses import HTMLResponse
@@ -43,10 +43,11 @@ app.add_middleware(
 
 PORT = int(os.getenv("PORT", 8000))
 HOST = os.getenv("HOST", "0.0.0.0")
+WHATSAPP_PHONE_NUMBER_LINK = os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")
 
 RTSP_URL = "rtsp://admin:Ashton2012@41.222.89.66:560"
 OUTPUT_DIR = "Human-Detection-Logs"
-ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates  
+ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates   
 
 # Global variables
 sessiontoken = None
@@ -68,7 +69,7 @@ def clean_up_logs_and_frames():
     Deletes old frames and logs to maintain memory efficiency.
     """
     logs = os.listdir(OUTPUT_DIR)
-    if len(logs) > 50:
+    if len(logs) > 30:
         for log in logs[:len(logs) - 50]:
             log_path = os.path.join(OUTPUT_DIR, log)
             if os.path.isfile(log_path):
@@ -144,7 +145,7 @@ async def whatsapp_worker():
 async def detection_task():
     while True:
         detect_human_and_gesture()
-        await asyncio.sleep(1)
+        await asyncio.sleep(.5)
 
 @app.on_event("startup")
 async def start_scheduler():
@@ -206,6 +207,8 @@ async def chat(session_token: str, user_input: str):
 @app.get("/show-qr")
 async def show_qr_page():
     global sessiontoken, bestframe
+    whatsapp_link = f'https://wa.me/{WHATSAPP_PHONE_NUMBER_LINK}?text=Hi!%20I\'m%20interested%20in%20chatting.'
+    qr_code_path = generate_QR(whatsapp_link)
 
     with lock:
         if not sessiontoken:
@@ -229,8 +232,7 @@ async def show_qr_page():
         session_data["complements"] = complements                        
 
         # Generate WhatsApp QR code
-        whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
-        qr_code_path = generate_qr_code(whatsapp_link, sessiontoken)
+        # whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
 
         # Generate HTML response with QR code and complement
         html_content = generate_qr_code_page(

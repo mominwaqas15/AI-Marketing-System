@@ -28,4 +28,13 @@ def generate_qr_code(url: str, session_token: str) -> str:
     qr_code_img = qrcode.make(url)
     qr_code_path = f"{OUTPUT_DIR}/qr_{session_token}.png"
     qr_code_img.save(qr_code_path)
-    return qr_code_path          
+    return qr_code_path    
+
+def generate_QR(url: str) -> str:
+    """
+    Generate a QR code for the given URL and save it.
+    """
+    qr_code_img = qrcode.make(url)
+    qr_code_path = f"{OUTPUT_DIR}/qr_global.png"
+    qr_code_img.save(qr_code_path)
+    return qr_code_path       

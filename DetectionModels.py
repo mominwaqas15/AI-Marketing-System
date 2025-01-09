@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 class HumanDetection:
-    def __init__(self, rtsp_url, output_dir, roi_coords, model_name='yolov5n', confidence_threshold=0.3, detection_duration=3):
+    def __init__(self, rtsp_url, output_dir, roi_coords, model_name='yolov5n', confidence_threshold=0.3, detection_duration=0.5):
         """
         Initializes the HumanDetection class.
         
