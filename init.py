@@ -21,11 +21,16 @@ from twilio.twiml.messaging_response import MessagingResponse
 import sms
 import random
 from asyncio import Queue
-
+from fastapi import FastAPI, BackgroundTasks, Request, UploadFile, File
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from DetectionModels import HumanDetection
+
+import numpy as np
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 
 gpt = Model()
@@ -257,69 +262,44 @@ async def show_qr_page():
     return HTMLResponse(content=html_content)
 
 @app.post("/test-gesture")
-async def test_gesture():
+async def test_gesture(image: UploadFile = File(...)):
     """
-    Detect gestures in the best frame from the RTSP stream using both MediaPipe and YOLOv5 models.
+    Detect gestures in the provided image using the gesture_recognizer.task model.
     """
     try:
-        # Detect humans and retrieve the best frame
-        detection_success, best_frame, frame_path = detector.detect_humans()
+        # Read and decode the uploaded image
+        contents = await image.read()
+        np_image = np.frombuffer(contents, np.uint8)
+        frame = cv2.imdecode(np_image, cv2.IMREAD_COLOR)
 
-        if not detection_success or best_frame is None:
-            return JSONResponse(status_code=404, content={"message": "No human detected or best frame not available."})
-
-        # Initialize results container
-        results = {}
+        # Save the frame as a temporary file for gesture detection
+        temp_image_path = "temp_input_image.jpg"
+        cv2.imwrite(temp_image_path, frame)
 
         # MediaPipe Gesture Recognition
         try:
-            # Convert the frame to the format required by MediaPipe
-            image = mp.Image.create_from_file(frame_path)
-
-            # Run gesture recognition
-            recognition_result = gesture_recognizer.recognize(image)
+            # Create MediaPipe Image from file
+            mp_image = mp.Image.create_from_file(temp_image_path)
+            recognition_result = gesture_recognizer.recognize(mp_image)
 
             if recognition_result.gestures and len(recognition_result.gestures[0]) > 0:
-                mediapipe_gestures = [
+                gestures = [
                     {
                         "gesture": gesture.category_name,
-                        "confidence": float(gesture.score)  # Convert to native float for JSON serialization
+                        "confidence": float(gesture.score)
                     }
                     for gesture in recognition_result.gestures[0]
                 ]
             else:
-                mediapipe_gestures = []
+                gestures = []
 
-            results["mediapipe"] = mediapipe_gestures
-
-        except Exception as e:
-            results["mediapipe_error"] = str(e)
-
-        # YOLOv5 Gesture Recognition
-        try:
-            if detector.gesture_detection_model:
-                yolo_results = detector.gesture_detection_model(best_frame) 
-                yolo_detections = yolo_results.xyxy[0].cpu().numpy()
-
-                yolo_gestures = [
-                    {
-                        "gesture": detector.gesture_detection_model.names[int(det[5])],
-                        "confidence": float(det[4])  # Convert to native float for JSON serialization
-                    }
-                    for det in yolo_detections
-                ]
-
-                results["yolo"] = yolo_gestures
-            else:
-                results["yolo"] = []
+            return JSONResponse(status_code=200, content={"gestures": gestures})
 
         except Exception as e:
-            results["yolo_error"] = str(e)
-
-        return JSONResponse(status_code=200, content={"results": results})
+            return JSONResponse(status_code=500, content={"message": f"Error during gesture detection: {str(e)}"})
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={"message": f"Error processing gesture detection: {str(e)}"})
+        return JSONResponse(status_code=500, content={"message": f"Error processing input image: {str(e)}"})
 
 @app.get("/test-qr")
 async def test_whatsapp_qr_code():
