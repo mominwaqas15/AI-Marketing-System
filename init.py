@@ -22,6 +22,12 @@ import sms
 import random
 from asyncio import Queue
 
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from DetectionModels import HumanDetection
+
+
 gpt = Model()
 
 load_dotenv()
@@ -48,6 +54,11 @@ WHATSAPP_PHONE_NUMBER_LINK = os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")
 RTSP_URL = "rtsp://admin:Ashton2012@41.222.89.66:560"
 OUTPUT_DIR = "Human-Detection-Logs"
 ROI_COORDS = (400, 650, 2750, 2900)  # Specify Region Of Interest coordinates   
+
+# Load the gesture recognition model
+base_options = python.BaseOptions(model_asset_path='gesture_recognizer.task')
+gesture_options = vision.GestureRecognizerOptions(base_options=base_options)
+gesture_recognizer = vision.GestureRecognizer.create_from_options(gesture_options)
 
 # Global variables
 sessiontoken = None
@@ -112,12 +123,15 @@ def detect_human_and_gesture():
                 "is_placeholder": False,
             })
 
-            if detector.process_frame_for_gesture(best_frame):
+            # Save the frame to a temporary file for gesture recognition
+            temp_frame_path = os.path.join(OUTPUT_DIR, "temp_frame.jpg")
+            cv2.imwrite(temp_frame_path, best_frame)
+
+            if detector.process_frame_for_gesture(temp_frame_path):
                 bestframe = best_frame
 
                 # Generate complements for detected human and save them in the session
                 complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-                # active_chat_sessions[sessiontoken]["complements"] = list(complement_generator)
                 active_chat_sessions[sessiontoken]["complements"] = complement_generator
 
                 print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
@@ -242,6 +256,71 @@ async def show_qr_page():
 
     return HTMLResponse(content=html_content)
 
+@app.post("/test-gesture")
+async def test_gesture():
+    """
+    Detect gestures in the best frame from the RTSP stream using both MediaPipe and YOLOv5 models.
+    """
+    try:
+        # Detect humans and retrieve the best frame
+        detection_success, best_frame, frame_path = detector.detect_humans()
+
+        if not detection_success or best_frame is None:
+            return JSONResponse(status_code=404, content={"message": "No human detected or best frame not available."})
+
+        # Initialize results container
+        results = {}
+
+        # MediaPipe Gesture Recognition
+        try:
+            # Convert the frame to the format required by MediaPipe
+            image = mp.Image.create_from_file(frame_path)
+
+            # Run gesture recognition
+            recognition_result = gesture_recognizer.recognize(image)
+
+            if recognition_result.gestures and len(recognition_result.gestures[0]) > 0:
+                mediapipe_gestures = [
+                    {
+                        "gesture": gesture.category_name,
+                        "confidence": float(gesture.score)  # Convert to native float for JSON serialization
+                    }
+                    for gesture in recognition_result.gestures[0]
+                ]
+            else:
+                mediapipe_gestures = []
+
+            results["mediapipe"] = mediapipe_gestures
+
+        except Exception as e:
+            results["mediapipe_error"] = str(e)
+
+        # YOLOv5 Gesture Recognition
+        try:
+            if detector.gesture_detection_model:
+                yolo_results = detector.gesture_detection_model(best_frame) 
+                yolo_detections = yolo_results.xyxy[0].cpu().numpy()
+
+                yolo_gestures = [
+                    {
+                        "gesture": detector.gesture_detection_model.names[int(det[5])],
+                        "confidence": float(det[4])  # Convert to native float for JSON serialization
+                    }
+                    for det in yolo_detections
+                ]
+
+                results["yolo"] = yolo_gestures
+            else:
+                results["yolo"] = []
+
+        except Exception as e:
+            results["yolo_error"] = str(e)
+
+        return JSONResponse(status_code=200, content={"results": results})
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Error processing gesture detection: {str(e)}"})
+
 @app.get("/test-qr")
 async def test_whatsapp_qr_code():
     """
@@ -264,7 +343,7 @@ async def test_whatsapp_qr_code():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>WhatsApp QR Code</title>
         <style>
-            body {{
+            body {{ 
                 font-family: Arial, sans-serif;
                 display: flex;
                 justify-content: center;

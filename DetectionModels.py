@@ -3,12 +3,15 @@ import torch
 import os
 import time
 from datetime import datetime
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 class HumanDetection:
     def __init__(self, rtsp_url, output_dir, roi_coords, model_name='yolov5n', confidence_threshold=0.3, detection_duration=0.5):
         """
         Initializes the HumanDetection class.
-        
+
         :param rtsp_url: RTSP stream URL for video input.
         :param output_dir: Directory to save detection logs and frames.
         :param roi_coords: Tuple (xmin, ymin, xmax, ymax) specifying the Region of Interest (ROI). 
@@ -21,81 +24,56 @@ class HumanDetection:
         self.xmin, self.ymin, self.xmax, self.ymax = roi_coords
         self.confidence_threshold = confidence_threshold
         self.detection_duration = detection_duration
-        self.person_detection_model = torch.hub.load('ultralytics/yolov5', model_name, pretrained=True)
-        self.gesture_detection_model = self.load_gesture_detection_model()
 
-    def load_gesture_detection_model(self):
+        # Initialize YOLO model for person detection
+        self.person_detection_model = torch.hub.load('ultralytics/yolov5', model_name, pretrained=True)
+
+        # Initialize MediaPipe Gesture Recognizer
+        base_options = python.BaseOptions(model_asset_path='gesture_recognizer.task')
+        gesture_options = vision.GestureRecognizerOptions(base_options=base_options)
+        self.gesture_recognizer = vision.GestureRecognizer.create_from_options(gesture_options)
+
+    def process_frame_for_gesture(self, frame_path):
         """
-        Loads the custom YOLOv5 model for gesture detection.
+        Processes a single frame for gesture detection using MediaPipe.
+
+        :param frame_path: Path to the saved frame.
+        :return: List of detected gestures with confidence scores.
         """
         try:
-            model = torch.hub.load('ultralytics/yolov5', 'custom', path=r'best.pt')
-            print("Gesture detection model loaded successfully.")
-            return model
+            image = mp.Image.create_from_file(frame_path)
+            recognition_result = self.gesture_recognizer.recognize(image)
+
+            if recognition_result.gestures and len(recognition_result.gestures[0]) > 0:
+                return [
+                    {
+                        "gesture": gesture.category_name,
+                        "confidence": float(gesture.score)
+                    }
+                    for gesture in recognition_result.gestures[0]
+                ]
+            else:
+                return []
+
         except Exception as e:
-            print(f"Error loading gesture detection model: {e}")
-            return None
-
-    def process_frame_for_gesture(self, frame):
-        """
-        Processes a single frame for gesture detection using the custom model. 
-        Detects if a "hi" gesture is present.
-        
-        :param frame: The frame to process.
-        :return: True if "hi" gesture is detected with confidence > 0.5, False otherwise.
-        """
-        if not self.gesture_detection_model:
-            print("Gesture detection model is not loaded.")
-            return False
-
-        results = self.gesture_detection_model(frame)
-        detections = results.xyxy[0].cpu().numpy()  # Get detections
-
-        for det in detections:
-            xmin, ymin, xmax, ymax, conf, cls = det
-            gesture = self.gesture_detection_model.names[int(cls)]  # Get gesture label
-            print(f"Gesture detected: {gesture}, Confidence: {conf:.2f}")
-            if gesture == "hi" or gesture == "person" and conf > 0.3:
-                return True  
-
-        return False
+            print(f"Error during gesture recognition: {e}")
+            return []
 
     def detect_humans(self):
         """
         Performs human detection on the given RTSP stream within the specified ROI.
         Saves logs and the frame with the highest confidence.
         """ 
-        directories = [d for d in os.listdir(self.output_dir) if os.path.isdir(os.path.join(self.output_dir, d))]
-        if len(directories) >= 10:
-            directories.sort()  # Sort directories by name (assuming timestamp-based naming)  
-            for dir_to_delete in directories[:len(directories) - 9]:
-                dir_path = os.path.join(self.output_dir, dir_to_delete)
-                try:
-                    for root, dirs, files in os.walk(dir_path, topdown=False):
-                        for file in files:
-                            os.remove(os.path.join(root, file))
-                        for dir in dirs:
-                            os.rmdir(os.path.join(root, dir))
-                    os.rmdir(dir_path)
-                    print(f"Deleted old directory: {dir_path}")
-                except Exception as e:
-                    print(f"Error deleting directory {dir_path}: {e}")
-        
+
         # FOR stream
-        cap = cv2.VideoCapture(self.rtsp_url)
+        # cap = cv2.VideoCapture(self.rtsp_url)
 
         # For Machine Camera
-        # cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(0)
 
         if not cap.isOpened():
-            print("hellooooooooooooooooooooooo")
             print("Error: Could not open RTSP stream.")
-            return False ,None,None
-        # cap = cv2.VideoCapture(0)
-        # if not cap.isOpened():
-        #     print("Error: Could not open the camera.")
-        #     return False, None, None
-
+            return False, None, None
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         iteration_dir = os.path.join(self.output_dir, timestamp)
@@ -118,14 +96,15 @@ class HumanDetection:
                     print("Error: Failed to grab frame.")
                     time.sleep(1)
                     continue
-                # Crop the frame to the ROI
-                roi_frame = frame[self.ymin:self.ymax, self.xmin:self.xmax]
-                # roi_frame = frame
 
-                # Detect objects in the cropped ROI frame
+                # Crop the frame to the ROI
+                # roi_frame = frame[self.ymin:self.ymax, self.xmin:self.xmax]
+                roi_frame = frame
+
+                # Detect objects in the cropped ROI frame using YOLO
                 results = self.person_detection_model(roi_frame)
                 detections = results.xyxy[0].cpu().numpy()  # Bounding boxes, confidence, class
-                #print("result from detection",results)
+
                 for det in detections:
                     det_xmin, det_ymin, det_xmax, det_ymax, conf, cls = det
                     if conf > self.confidence_threshold and int(cls) == 0:  # Class 0 is human
@@ -155,7 +134,7 @@ class HumanDetection:
                     f"BBox: [{best_bbox[0]:.1f}, {best_bbox[1]:.1f}, {best_bbox[2]:.1f}, {best_bbox[3]:.1f}]\n"
                 )
                 humans_log_file.close()
-                return True,best_frame,frame_save_path
+                return True, best_frame, frame_save_path
             except Exception as e:
                 print(f"Error saving frame or writing to log: {e}")
         else:
@@ -163,17 +142,18 @@ class HumanDetection:
             humans_log_file.close()
             return False, None, None
 
-
 # Example Usage
 if __name__ == "__main__":
     rtsp_url = "rtsp://admin:Ashton2012@41.222.89.66:560"
     output_dir = "Human-Detection-Logs"
-    roi_coords = (400, 650, 2600, 2500)  # Specify Region Of Interest coordinates 
+    roi_coords = (400, 650, 2600, 2500)
 
     detector = HumanDetection(rtsp_url, output_dir, roi_coords)
-    detection_success = detector.detect_humans()
+    detection_success, best_frame, frame_path = detector.detect_humans()
 
     if detection_success:
         print("Detection completed successfully.")
+        gestures = detector.process_frame_for_gesture(frame_path)
+        print("Detected Gestures:", gestures)
     else:
         print("Detection failed or no humans detected.")
