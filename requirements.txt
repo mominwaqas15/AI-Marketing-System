@@ -8,7 +8,7 @@ opencv-contrib-python==4.10.0.84
 opencv-python==4.10.0.84
 python-dotenv==1.0.1
 openai==1.55.3
-twilio==9.3.8
+twilio==9.4.2
 aiohappyeyeballs==2.4.4
 aiohttp==3.11.10
 aiohttp-retry==2.8.3
