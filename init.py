@@ -105,7 +105,7 @@ def detect_human_and_gesture():
     new_session_token = chat_model.generate_token()
     sessiontoken = new_session_token
     
-    if best_frame != None:
+    if best_frame:
         complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
         active_chat_sessions[sessiontoken]["complements"] = complement_generator
         print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
