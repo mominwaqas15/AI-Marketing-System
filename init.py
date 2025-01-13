@@ -104,23 +104,18 @@ def detect_human_and_gesture():
     # Generate a new session token
     new_session_token = chat_model.generate_token()
     sessiontoken = new_session_token
-    
+
     print(f"Session Token Initialized: {sessiontoken}")
 
     with lock:
-        # Initialize the session in active_chat_sessions
+        # Initialize the session in active_chat_sessions if it doesn't exist
         if sessiontoken not in active_chat_sessions:
-            if best_frame is not None:
-                print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
-                active_chat_sessions[sessiontoken] = {
-                    "frame_path": None,
-                    "timestamp": time.time(),
-                    "is_placeholder": True,
-                    "complements": [],
-                }    
-                active_chat_sessions[sessiontoken]["complements"] = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-        if sessiontoken not in chat_model.chat_sessions:
-            chat_model.initialize_chat_history(sessiontoken)            
+            active_chat_sessions[sessiontoken] = {
+                "frame_path": None,
+                "timestamp": time.time(),
+                "is_placeholder": True,
+                "complements": [],
+            }
 
         if detection_success:
             # Update session with detection details
@@ -130,18 +125,24 @@ def detect_human_and_gesture():
                 "is_placeholder": False,
             })
 
+            # Generate complements if best_frame is not None
+            if best_frame is not None:
+                complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
+                active_chat_sessions[sessiontoken]["complements"] = complement_generator
+                print(f"Complements generated for session {sessiontoken}: {list(active_chat_sessions[sessiontoken]['complements'])}")
+
             # Save the frame to a temporary file for gesture recognition
             temp_frame_path = os.path.join(OUTPUT_DIR, "temp_frame.jpg")
             cv2.imwrite(temp_frame_path, best_frame)
 
+            # Generate complements if a valid gesture is detected
             if detector.process_frame_for_gesture(temp_frame_path):
                 bestframe = best_frame
 
-                # Generate complements for detected human and save them in the session
                 complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
                 active_chat_sessions[sessiontoken]["complements"] = complement_generator
 
-                print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
+                print(f"Gesture-based complements generated for session {sessiontoken}: {list(active_chat_sessions[sessiontoken]['complements'])}")
             else:
                 print("Gesture detected but no valid complements generated.")
         else:
@@ -150,6 +151,7 @@ def detect_human_and_gesture():
 
         # Log the current session details
         print(f"Session {sessiontoken} details: {active_chat_sessions[sessiontoken]}")
+
 
 
 async def whatsapp_worker():
