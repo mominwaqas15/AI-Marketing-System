@@ -64,7 +64,7 @@ class HumanDetection:
         Performs human detection on the given RTSP stream within the specified ROI.
         Saves logs and the frame with the highest confidence.
         """ 
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(self.rtsp_url)
 
         if not cap.isOpened():
             print("Error: Could not open RTSP stream.")
