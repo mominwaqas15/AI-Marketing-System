@@ -105,23 +105,20 @@ def detect_human_and_gesture():
     new_session_token = chat_model.generate_token()
     sessiontoken = new_session_token
     
-    if best_frame:
-        complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-        active_chat_sessions[sessiontoken]["complements"] = complement_generator
-        print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
-
     print(f"Session Token Initialized: {sessiontoken}")
 
     with lock:
         # Initialize the session in active_chat_sessions
         if sessiontoken not in active_chat_sessions:
-            active_chat_sessions[sessiontoken] = {
-                "frame_path": None,
-                "timestamp": time.time(),
-                "is_placeholder": True,
-                "complements": [],
-            }
-
+            if best_frame is not None:
+                print(f"Complements generated for session {sessiontoken}: {active_chat_sessions[sessiontoken]['complements']}")
+                active_chat_sessions[sessiontoken] = {
+                    "frame_path": None,
+                    "timestamp": time.time(),
+                    "is_placeholder": True,
+                    "complements": [],
+                }    
+                active_chat_sessions[sessiontoken]["complements"] = chat_model.image_description(image_path=frame_path, token=sessiontoken)
         if sessiontoken not in chat_model.chat_sessions:
             chat_model.initialize_chat_history(sessiontoken)            
 
