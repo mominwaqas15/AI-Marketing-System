@@ -64,11 +64,6 @@ class HumanDetection:
         Performs human detection on the given RTSP stream within the specified ROI.
         Saves logs and the frame with the highest confidence.
         """ 
-
-        # FOR stream
-        # cap = cv2.VideoCapture(self.rtsp_url)
-
-        # For Machine Camera
         cap = cv2.VideoCapture(0)
 
         if not cap.isOpened():
@@ -96,10 +91,9 @@ class HumanDetection:
                     print("Error: Failed to grab frame.")
                     time.sleep(1)
                     continue
-
                 # Crop the frame to the ROI
-                # roi_frame = frame[self.ymin:self.ymax, self.xmin:self.xmax]
-                roi_frame = frame
+                roi_frame = frame[self.ymin:self.ymax, self.xmin:self.xmax]
+                #roi_frame = frame
 
                 # Detect objects in the cropped ROI frame using YOLO
                 results = self.person_detection_model(roi_frame)
