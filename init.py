@@ -26,7 +26,7 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from DetectionModels import HumanDetection
-
+import types
 import numpy as np
 import mediapipe as mp
 from mediapipe.tasks import python
