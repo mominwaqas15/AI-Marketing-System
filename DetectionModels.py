@@ -54,10 +54,13 @@ class HumanDetection:
                 ]
             else:
                 return []
-
-        except Exception as e:
-            print(f"Error during gesture recognition: {e}")
+        except FileNotFoundError as e:
+            print(f"File not found during gesture recognition: {e}")
             return []
+        except Exception as e:
+            print(f"Unexpected error during gesture recognition: {e}")
+            return []
+
 
     def detect_humans(self):
         """

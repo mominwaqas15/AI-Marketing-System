@@ -127,24 +127,30 @@ def detect_human_and_gesture():
 
             # Generate complements if best_frame is not None
             if best_frame is not None:
-                complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-                active_chat_sessions[sessiontoken]["complements"] = complement_generator
-                print(f"Complements generated for session {sessiontoken}: {list(active_chat_sessions[sessiontoken]['complements'])}")
+                try:
+                    complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
+                    active_chat_sessions[sessiontoken]["complements"] = complement_generator
+                    print(f"Complements generated for session {sessiontoken}: {list(active_chat_sessions[sessiontoken]['complements'])}")
+                except Exception as e:
+                    print(f"Error generating complements for best frame: {e}")
 
             # Save the frame to a temporary file for gesture recognition
             temp_frame_path = os.path.join(OUTPUT_DIR, "temp_frame.jpg")
             cv2.imwrite(temp_frame_path, best_frame)
 
             # Generate complements if a valid gesture is detected
-            if detector.process_frame_for_gesture(temp_frame_path):
+            gesture_results = detector.process_frame_for_gesture(temp_frame_path)
+            if gesture_results:  # Check if gestures are detected
                 bestframe = best_frame
-
-                complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-                active_chat_sessions[sessiontoken]["complements"] = complement_generator
-
-                print(f"Gesture-based complements generated for session {sessiontoken}: {list(active_chat_sessions[sessiontoken]['complements'])}")
+                try:
+                    complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
+                    complements = list(complement_generator)  # Consume the generator
+                    active_chat_sessions[sessiontoken]["complements"] = complements
+                    print(f"Gesture-based complements generated for session {sessiontoken}: {complements}")
+                except Exception as e:
+                    print(f"Error generating gesture-based complements: {e}")
             else:
-                print("Gesture detected but no valid complements generated.")
+                print("No valid gestures detected in the frame.")
         else:
             best_frame = None
             print("No human detected. Initializing session with default complements.")
