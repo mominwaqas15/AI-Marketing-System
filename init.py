@@ -241,27 +241,29 @@ async def show_qr_page():
 
     with lock:
         if not sessiontoken:
-            # print("\n\n\nno session token\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
         if sessiontoken not in active_chat_sessions:
-            print("\n\n\nnot in active sessions\n\n\n")
+            print("\n\n\nSession not found in active sessions.\n\n\n")
             return JSONResponse(status_code=404, content={"message": "No active session or session expired."})
 
+        # Retrieve session data
         session_data = active_chat_sessions[sessiontoken]
 
-        # Check if complements are available
-        complements = list(session_data.get("complements", []))  # Convert to a list
+        # Ensure complements are available
+        complements = session_data.get("complements", [])
+        if isinstance(complements, types.GeneratorType):
+            complements = list(complements)  # Consume the generator if it's not already a list
+            session_data["complements"] = complements  # Update with the consumed list
+
         if not complements:
             current_complement = "Welcome to Ashton Media!"
         else:
-            current_complement = complements.pop(0)
-            complements.append(current_complement)  # Rotate complement for reuse
+            current_complement = complements.pop(0)  # Get the first complement
+            complements.append(current_complement)  # Rotate for reuse
 
-        session_data["complements"] = complements                        
-
-        # Generate WhatsApp QR code
-        # whatsapp_link = f'https://wa.me/{os.getenv("TWILIO_PHONE_NUMBER_FOR_LINK")}?text=Hi!%20I\'m%20interested%20in%20chatting.'
+        # Update complements in the session
+        session_data["complements"] = complements
 
         # Generate HTML response with QR code and complement
         html_content = generate_qr_code_page(
@@ -270,6 +272,7 @@ async def show_qr_page():
         )
 
     return HTMLResponse(content=html_content)
+
 
 @app.post("/test-gesture")
 async def test_gesture(image: UploadFile = File(...)):
