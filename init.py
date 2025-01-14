@@ -111,12 +111,11 @@ def detect_human_and_gesture():
         # Initialize the session in active_chat_sessions if it doesn't exist
         if sessiontoken not in active_chat_sessions:
             active_chat_sessions[sessiontoken] = {
-                "frame_path": None,
-                "timestamp": time.time(),
-                "is_placeholder": True,
-                "complements": [],
-            }
-
+            "frame_path": None,
+            "timestamp": time.time(),
+            "is_placeholder": True,
+            "complements": ["Welcome to Ashton Media! We hope you have a great experience!"],  # Default complement
+        }
         if detection_success:
             # Update session with detection details
             active_chat_sessions[sessiontoken].update({
@@ -129,8 +128,9 @@ def detect_human_and_gesture():
             if best_frame is not None:
                 try:
                     complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-                    active_chat_sessions[sessiontoken]["complements"] = complement_generator
-                    print(f"Complements generated for session {sessiontoken}: {list(active_chat_sessions[sessiontoken]['complements'])}")
+                    complements = list(complement_generator)  # Consume the generator into a list
+                    active_chat_sessions[sessiontoken]["complements"] = complements
+                    print(f"Complements generated for session {sessiontoken}: {complements}")
                 except Exception as e:
                     print(f"Error generating complements for best frame: {e}")
 
@@ -144,7 +144,7 @@ def detect_human_and_gesture():
                 bestframe = best_frame
                 try:
                     complement_generator = chat_model.image_description(image_path=frame_path, token=sessiontoken)
-                    complements = list(complement_generator)  # Consume the generator
+                    complements = list(complement_generator)  # Consume the generator into a list
                     active_chat_sessions[sessiontoken]["complements"] = complements
                     print(f"Gesture-based complements generated for session {sessiontoken}: {complements}")
                 except Exception as e:
