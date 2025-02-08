@@ -6,6 +6,8 @@ from datetime import datetime
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+from gesture_model import app
+
 
 class HumanDetection:
     def __init__(self, rtsp_url, output_dir, roi_coords, model_name='yolov5n', confidence_threshold=0.3, detection_duration=0.5):
@@ -41,19 +43,22 @@ class HumanDetection:
         :return: List of detected gestures with confidence scores.
         """
         try:
-            image = mp.Image.create_from_file(frame_path)
-            recognition_result = self.gesture_recognizer.recognize(image)
+            
+            # image = mp.Image.create_from_file(frame_path)
+            # recognition_result = self.gesture_recognizer.recognize(image)
 
-            if recognition_result.gestures and len(recognition_result.gestures[0]) > 0:
-                return [
-                    {
-                        "gesture": gesture.category_name,
-                        "confidence": float(gesture.score)
-                    }
-                    for gesture in recognition_result.gestures[0]
-                ]
-            else:
-                return []
+            # if recognition_result.gestures and len(recognition_result.gestures[0]) > 0:
+            #     return [
+            #         {
+            #             "gesture": gesture.category_name,
+            #             "confidence": float(gesture.score)
+            #         }
+            #         for gesture in recognition_result.gestures[0]
+            #     ]
+            # else:
+            #     return []
+            image = cv2.imread(frame_path)
+            gesture = app.gesture_detection(image)
         except FileNotFoundError as e:
             print(f"File not found during gesture recognition: {e}")
             return []
@@ -154,3 +159,5 @@ if __name__ == "__main__":
         print("Detected Gestures:", gestures)
     else:
         print("Detection failed or no humans detected.")
+    # gestures = detector.process_frame_for_gesture("/content/AI-Marketing-System/hello_gesture.jpeg")
+    # print(gestures)
